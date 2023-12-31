@@ -8,7 +8,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 def search_on_google():
-    # Get search terms from a text file
+    # Get search term from a text file
     with open('search_terms.txt', 'r', encoding='utf-8') as file:
         search_terms = file.read().split()
 
@@ -44,22 +44,13 @@ def search_on_google():
     # Wait for the search results to load
     WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.g")))
 
-    # Find the sponsored links above the organic search results
-    sponsored_links = driver.find_elements(By.CSS_SELECTOR, "div#tads li.ads-ad")
+    # Find the sponsored links
+    sponsored_links = driver.find_elements(By.CSS_SELECTOR, "div.eMXfhf")
 
     # Iterate over each sponsored link
     for link in sponsored_links:
-        # Get the link element within the sponsored result
-        link_element = link.find_element(By.CSS_SELECTOR, "a")
-
-        # Get the URL of the sponsored result
-        url = link_element.get_attribute("href")
-
-        # Open the URL in a new tab
-        driver.execute_script("window.open(arguments[0]);", url)
-
-        # Switch to the newly opened tab
-        driver.switch_to.window(driver.window_handles[-1])
+        # Click on the sponsored link
+        link.find_element(By.CSS_SELECTOR, "a").click()
 
         # Wait for the website to load
         time.sleep(5)  # Adjust the sleep time as needed
@@ -71,19 +62,16 @@ def search_on_google():
         # Stay on the website for the specified time
         time.sleep(stay_time * 60)  # Convert minutes to seconds
 
-        # Close the current tab
-        driver.close()
-
-        # Switch back to the search results tab
-        driver.switch_to.window(driver.window_handles[0])
+        # Go back to the search results page
+        driver.back()
 
         # Wait for the search results to load again
         WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.g")))
 
-    # Close the browser
-    driver.quit()
+    # Rest of the code...
 
 # Example usage:
 search_on_google()
+
 
 
