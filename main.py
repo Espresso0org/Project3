@@ -7,8 +7,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 def search_on_google():
-    # Get user input for search term
-    search_terms = input("Enter the search term: ").split()
+    # Get search term from a text file
+    with open('search_terms.txt', 'r') as file:
+        search_terms = file.read().split()
 
     # Get user input for time to stay on each website
     stay_time = int(input("Enter the time to stay on each website (in minutes): "))
@@ -70,4 +71,3 @@ def search_on_google():
 
 # Example usage:
 search_on_google()
-
