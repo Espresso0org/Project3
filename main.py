@@ -8,7 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 def search_on_google():
     # Get search term from a text file
-    with open('search_terms.txt', 'r') as file:
+    with open('search_terms.txt', 'r', encoding='utf-8') as file:
         search_terms = file.read().split()
 
     # Get user input for time to stay on each website
@@ -71,3 +71,4 @@ def search_on_google():
 
 # Example usage:
 search_on_google()
+
