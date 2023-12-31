@@ -3,9 +3,6 @@ import time
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
 def search_on_google():
     # Get search term from a text file
@@ -31,7 +28,7 @@ def search_on_google():
     # Create a new instance of the Chrome driver with the specified path and options
     driver = webdriver.Chrome(executable_path=chromedriver_path, options=chrome_options)
 
-    # Open Google Chrome
+    # Open Google Chrome and navigate to the Google homepage
     driver.get("https://www.google.com/")
 
     # Find the search input element and enter the search terms
@@ -42,15 +39,21 @@ def search_on_google():
     search_input.send_keys(Keys.RETURN)
 
     # Wait for the search results to load
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.g")))
+    time.sleep(5)  # Adjust the sleep time as needed
 
     # Find the sponsored links
-    sponsored_links = driver.find_elements(By.CSS_SELECTOR, "div.eMXfhf")
+    sponsored_links = driver.find_elements_by_css_selector("div.eMXfhf")
 
     # Iterate over each sponsored link
     for link in sponsored_links:
-        # Click on the sponsored link
-        link.find_element(By.CSS_SELECTOR, "a").click()
+        # Get the URL of the sponsored link
+        url = link.find_element_by_css_selector("a").get_attribute("href")
+
+        # Open the sponsored link in a new tab
+        driver.execute_script("window.open('" + url + "', '_blank');")
+
+        # Switch to the newly opened tab
+        driver.switch_to.window(driver.window_handles[-1])
 
         # Wait for the website to load
         time.sleep(5)  # Adjust the sleep time as needed
@@ -62,16 +65,15 @@ def search_on_google():
         # Stay on the website for the specified time
         time.sleep(stay_time * 60)  # Convert minutes to seconds
 
-        # Go back to the search results page
-        driver.back()
-
-        # Wait for the search results to load again
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.g")))
+        # Close the current tab and switch back to the search results page
+        driver.close()
+        driver.switch_to.window(driver.window_handles[0])
 
     # Rest of the code...
 
 # Example usage:
 search_on_google()
+
 
 
 
