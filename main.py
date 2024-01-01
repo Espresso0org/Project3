@@ -1,3 +1,4 @@
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
@@ -37,28 +38,24 @@ wait.until(EC.presence_of_element_located((By.ID, "search")))
 # Find all the search result elements
 search_results = driver.find_elements(By.CSS_SELECTOR, "div.g")
 
-# Iterate over the search results and collect the sponsored websites
-sponsored_websites = []
+# Iterate over the search results and extract the data between href=" and data-ae=
 for search_result in search_results:
-    # Check if the search result has a sponsored tag
-    is_sponsored = len(search_result.find_elements(By.CSS_SELECTOR, "span[aria-label='Ad']")) > 0
+    # Get the outer HTML of the search result element
+    outer_html = search_result.get_attribute("outerHTML")
 
-    if is_sponsored:
-        # Get the website URL
-        website_link = search_result.find_element(By.CSS_SELECTOR, "a")
-        website_url = website_link.get_attribute("href")
+    # Extract the data between href=" and data-ae=
+    start_index = outer_html.find('href="') + len('href="')
+    end_index = outer_html.find('data-ae=', start_index)
+    extracted_data = outer_html[start_index:end_index]
 
-        # Add the sponsored website to the list
-        sponsored_websites.append(website_url)
-
-# Print the sponsored websites
-for sponsored_website in sponsored_websites:
-    print(sponsored_website)
+    # Print the extracted data
+    print(extracted_data)
 
 # Close the browser
 driver.quit()
 
 input("Press Enter to exit...")
+)
 
 
 
