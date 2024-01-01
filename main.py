@@ -1,78 +1,65 @@
-python
-import time
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 
-def search_on_google():
-    # Get search term from a text file
-    with open('search_terms.txt', 'r', encoding='utf-8') as file:
-        search_terms = file.read().split()
+# Set the path to the ChromeDriver executable
+chrome_driver_path = "path/to/chromedriver"
 
-    # Get user input for time to stay on each website
-    stay_time = int(input("Enter the time to stay on each website (in minutes): "))
+chrome_options = Options()
+chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36")
 
-    # Get user input for user agent type
-    user_agent_type = int(input("Enter 1 for mobile user agent, or 2 for desktop user agent: "))
+# Create a new instance of ChromeDriver
+driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
 
-    # Create Chrome options and set the User-Agent based on the user input
-    chrome_options = Options()
-    if user_agent_type == 1:
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Mobile Safari/537.36")
-    elif user_agent_type == 2:
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36")
+# Maximize the browser window
+driver.maximize_window()
 
-    # Set the path to the ChromeDriver executable
-    chromedriver_path = '/path/to/chromedriver'  # Replace with the actual path to chromedriver
+# Navigate to Google.com
+driver.get("https://www.google.com")
 
-    # Create a new instance of the Chrome driver with the specified path and options
-    driver = webdriver.Chrome(executable_path=chromedriver_path, options=chrome_options)
+# Find the search input field
+search_input = driver.find_element(By.NAME, "q")
 
-    # Open Google Chrome and navigate to the Google homepage
-    driver.get("https://www.google.com/")
+# Enter the keyword you want to search
+keyword = "your keyword"
+search_input.send_keys(keyword)
 
-    # Find the search input element and enter the search terms
-    search_input = driver.find_element_by_name("q")
-    search_input.send_keys(" ".join(search_terms))
+# Press Enter to perform the search
+search_input.send_keys(Keys.ENTER)
 
-    # Press Enter to perform the search
-    search_input.send_keys(Keys.RETURN)
+# Wait until the search results are loaded
+wait = WebDriverWait(driver, 10)
+wait.until(EC.presence_of_element_located((By.ID, "search")))
 
-    # Wait for the search results to load
-    time.sleep(5)  # Adjust the sleep time as needed
+# Find all the search result elements
+search_results = driver.find_elements(By.CSS_SELECTOR, "div.g")
 
-    # Find the sponsored links
-    sponsored_links = driver.find_elements_by_css_selector("div.eMXfhf")
+# Iterate over the search results and collect the sponsored websites
+sponsored_websites = []
+for search_result in search_results:
+    # Check if the search result has a sponsored tag
+    is_sponsored = len(search_result.find_elements(By.CSS_SELECTOR, "span[aria-label='Ad']")) > 0
 
-    # Iterate over each sponsored link
-    for link in sponsored_links:
-        # Get the URL of the sponsored link
-        url = link.find_element_by_css_selector("a").get_attribute("href")
+    if is_sponsored:
+        # Get the website URL
+        website_link = search_result.find_element(By.CSS_SELECTOR, "a")
+        website_url = website_link.get_attribute("href")
 
-        # Open the sponsored link in a new tab
-        driver.execute_script("window.open('" + url + "', '_blank');")
+        # Add the sponsored website to the list
+        sponsored_websites.append(website_url)
 
-        # Switch to the newly opened tab
-        driver.switch_to.window(driver.window_handles[-1])
+# Print the sponsored websites
+for sponsored_website in sponsored_websites:
+    print(sponsored_website)
 
-        # Wait for the website to load
-        time.sleep(5)  # Adjust the sleep time as needed
+# Close the browser
+driver.quit()
 
-        # Scroll down to the end of the page
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)  # Adjust the sleep time as needed
+input("Press Enter to exit...")
 
-        # Stay on the website for the specified time
-        time.sleep(stay_time * 60)  # Convert minutes to seconds
-
-        # Close the current tab and switch back to the search results page
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
-
-    # Rest of the code...
-
-# Example usage:
-search_on_google()
 
 
 
