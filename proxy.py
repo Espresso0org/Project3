@@ -82,3 +82,10 @@ for proxy in proxy_list:
             driver.execute_script(f"window.open('{base_url}{url}', '_blank');")
         
         # Rest of the code for each proxy...
+        
+    except Exception as e:
+        print(f"An error occurred for proxy {proxy}: {str(e)}")
+        continue
+    
+    finally:
+        driver.quit()
