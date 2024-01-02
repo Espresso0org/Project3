@@ -30,6 +30,13 @@ for proxy in proxy_list:
         # Wait for 10 seconds
         time.sleep(10)
 
+        # Check if the element 'div.icon.icon-generic' is present on the page
+        error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
+        if len(error_element) > 0:
+            print(f"Connection unsuccessful using proxy: {proxy}")
+            # Continue to the next proxy in case of failure
+            continue
+
         # Do something on the website if needed
 
         # If the above operations were successful, break out of the loop
