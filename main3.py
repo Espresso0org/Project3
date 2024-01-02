@@ -27,17 +27,20 @@ for proxy in proxy_list:
         driver = webdriver.Chrome(executable_path=path_to_webdriver, options=chrome_options)
         driver.get(website_url)
 
-        # Wait until the element with class 'div.icon.icon-generic' is present
-        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.icon.icon-generic")))
+        # Wait for 10 seconds
+        time.sleep(10)
 
-        # Do something on the website if needed
+        # Check if the target element 'div.icon.icon-generic' is present
+        is_element_present = EC.presence_of_element_located((By.CSS_SELECTOR, "div.icon.icon-generic"))(driver)
+
+        if is_element_present:
+            print("Proxy failed: Target element is present.")
+        else:
+            print("Proxy successful: Target element not found.")
+            break  # Break the loop if the proxy is successful
 
         # Quit the webdriver
         driver.quit()
 
-        # Break the loop if the proxy was successful
-        break
-
-    except Exception as e:
+    except:
         print(f"Proxy failed: {proxy}")
-        print(f"Error message: {str(e)}")
