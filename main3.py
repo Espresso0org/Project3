@@ -35,6 +35,8 @@ for proxy in proxy_list:
         
         if len(error_element) > 0: 
             print("Proxy is bad")
+            # Quit the webdriver
+            driver.quit()
             # Use the next proxy on the proxy list
             continue
         else:
@@ -49,6 +51,9 @@ for proxy in proxy_list:
                 # ...
                 pass
 
-    finally:
-        # Quit the webdriver
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        # Quit the webdriver in case of an error
         driver.quit()
+        # Start from the beginning with the next proxy
+        continue
