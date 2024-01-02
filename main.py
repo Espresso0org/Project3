@@ -51,17 +51,4 @@ for heading in headings:
 
         print(data_rw_value)
         
-        # Open the URL
-        driver.execute_script('''window.open("{}","_blank");'''.format(href_value))
-        driver.switch_to.window(driver.window_handles[-1])
-
-        # Scroll to the end of the webpage
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-        # Wait for  minute
-        time.sleep(60*stay)
-
-        # Close the current tab and switch to the next URL
-        driver.close()
-        driver.switch_to.window(driver.window_handles[0])
         
