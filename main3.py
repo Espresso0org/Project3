@@ -1,3 +1,4 @@
+python
 import urllib
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -32,22 +33,21 @@ for proxy in proxy_list:
         # Check if the div with class 'icon icon-generic' is present
         error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
         
-    if len(error_element) > 0: 
-        print("Proxy is bad")
-        # Use the next proxy on the proxy list
-        continue
-
-    else:
-        print("Good proxy")
-        # Stay on the website for 10 seconds
-        time.sleep(10)
-        # Scroll to the end of the website
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        # Repeat the process 10 times with the good proxy
-        for _ in range(10):
-            # Do something on the website if needed
-            # ...
-            pass
+        if len(error_element) > 0: 
+            print("Proxy is bad")
+            # Use the next proxy on the proxy list
+            continue
+        else:
+            print("Good proxy")
+            # Stay on the website for 10 seconds
+            time.sleep(10)
+            # Scroll to the end of the website
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            # Repeat the process 10 times with the good proxy
+            for _ in range(10):
+                # Do something on the website if needed
+                # ...
+                pass
 
     finally:
         # Quit the webdriver
