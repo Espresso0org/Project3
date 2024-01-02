@@ -1,3 +1,4 @@
+python
 import urllib
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -26,24 +27,17 @@ for proxy in proxy_list:
         driver = webdriver.Chrome(executable_path=path_to_webdriver, options=chrome_options)
         driver.get(website_url)
 
-        # Wait for 10 seconds
-        
-
-        # Check if the element 'div.icon.icon-generic' is present on the page
-        error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
-        if len(error_element) > 0:
-            print(f"Connection unsuccessful using proxy: {proxy}")
-            # Continue to the next proxy in case of failure
-            continue
+        # Wait until the element with class 'div.icon.icon-generic' is present
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.icon.icon-generic")))
 
         # Do something on the website if needed
 
-
-    except Exception as e:
-        print(f"Failed to connect using proxy: {proxy}")
-        print(f"Error message: {str(e)}")
-        # Continue to the next proxy in case of failure
-
-    finally:
         # Quit the webdriver
         driver.quit()
+
+        # Break the loop if the proxy was successful
+        break
+
+    except Exception as e:
+        print(f"Proxy failed: {proxy}")
+        print(f"Error message: {str(e)}")
