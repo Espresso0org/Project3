@@ -1,3 +1,4 @@
+python
 import urllib
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -9,16 +10,16 @@ import time
 import re
 
 stay = int(input("Enter time to stay on each page in minutes: "))
-trynumb = input("Enter the number of tries: ")
+trynumb = int(input("Enter the number of tries: "))
 user_agent_type = int(input("Enter 1 for mobile user agent or 2 for desktop user agent: "))
-use_proxy = input("Do you want to use proxy?(yes/no): ")
+use_proxy = input("Do you want to use proxy? (yes/no): ")
 
 chrome_driver_path = "chromedriver"
 
 chrome_options = Options()
 if user_agent_type == 1:
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36")
-if user_agent_type == 2:
+elif user_agent_type == 2:
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36")
 
 driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
@@ -71,10 +72,8 @@ with open("url.txt", "r", encoding="utf-8") as file:
     urls = file.read().strip().split("\n")
 
 for proxy in proxy_list:
-    
-        if use_proxy.lower() == "yes":
-            print(f"Trying proxy: {proxy}")
-    #try:
+    if use_proxy.lower() == "yes":
+        print(f"Trying proxy: {proxy}")
         chrome_options = Options()
         chrome_options.add_argument(f"--proxy-server=http://{proxy}")
         
@@ -97,19 +96,12 @@ for proxy in proxy_list:
                     # Do something on the website if needed
                     # ...
                     pass
-                    except Exception as e:
-                           print(f"An error occurred: {str(e)}")
-                           driver.quit()
-                       continue
-                
-        else:
-             time.sleep(60*stay)
-             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-             for _ in range(trynumb):
-                    # Do something on the website if needed
-                    # ...
-                  pass
-    
-             driver.quit()
+    else:
+        time.sleep(60*stay)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        for _ in range(trynumb):
+            # Do something on the website if needed
+            # ...
+            pass
 
-
+    driver.quit()
