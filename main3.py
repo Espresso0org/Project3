@@ -27,20 +27,29 @@ for proxy in proxy_list:
         driver = webdriver.Chrome(executable_path=path_to_webdriver, options=chrome_options)
         driver.get(website_url)
 
-        # Wait for 10 seconds
-        time.sleep(10)
+        # Wait for the URL to load completely
+        WebDriverWait(driver, 10).until(EC.url_to_be(website_url))
 
-        # Check if the target element 'div.icon.icon-generic' is present
-        is_element_present = EC.presence_of_element_located((By.CSS_SELECTOR, "div.icon.icon-generic"))(driver)
+        # Check if the div with class 'icon icon-generic' is present
+        is_icon_present = EC.presence_of_element_located((By.CSS_SELECTOR, 'div.icon.icon-generic'))
+        WebDriverWait(driver, 10).until(is_icon_present)
 
-        if is_element_present:
-            print("Proxy failed: Target element is present.")
-        else:
-            print("Proxy successful: Target element not found.")
-            break  # Break the loop if the proxy is successful
-
-        # Quit the webdriver
-        driver.quit()
+        print("Proxy is bad")
+        # Use the next proxy on the proxy list
+        continue
 
     except:
-        print(f"Proxy failed: {proxy}")
+        print("Good proxy")
+        # Stay on the website for 10 seconds
+        time.sleep(10)
+        # Scroll to the end of the website
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        # Repeat the process 10 times with the good proxy
+        for _ in range(10):
+            # Do something on the website if needed
+            # ...
+            pass
+
+    finally:
+        # Quit the webdriver
+        driver.quit()
