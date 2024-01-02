@@ -1,4 +1,3 @@
-python
 import urllib
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -10,8 +9,9 @@ import time
 import re
 
 stay = int(input("Enter time to stay on each page in minutes: "))
-trynumb = input("Enter the number of tries per proxy: ")
+trynumb = input("Enter the number of tries: ")
 user_agent_type = int(input("Enter 1 for mobile user agent or 2 for desktop user agent: "))
+use_proxy = input("Do you want to use proxy?(yes/no): ")
 
 chrome_driver_path = "chromedriver"
 
@@ -71,8 +71,10 @@ with open("url.txt", "r", encoding="utf-8") as file:
     urls = file.read().strip().split("\n")
 
 for proxy in proxy_list:
-    print(f"Trying proxy: {proxy}")
-    try:
+    
+        if use_proxy.lower() == "yes":
+            print(f"Trying proxy: {proxy}")
+    #try:
         chrome_options = Options()
         chrome_options.add_argument(f"--proxy-server=http://{proxy}")
         
@@ -95,10 +97,19 @@ for proxy in proxy_list:
                     # Do something on the website if needed
                     # ...
                     pass
+                    except Exception as e:
+                           print(f"An error occurred: {str(e)}")
+                           driver.quit()
+                       continue
+                
+        else:
+             time.sleep(60*stay)
+             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+             for _ in range(trynumb):
+                    # Do something on the website if needed
+                    # ...
+                  pass
+    
+             driver.quit()
 
-            driver.quit()
 
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        driver.quit()
-        continue
