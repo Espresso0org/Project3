@@ -1,3 +1,4 @@
+
 import urllib
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -67,43 +68,39 @@ driver.close()
 with open("proxy.txt", "r") as proxy_file:
     proxy_list = [line.strip() for line in proxy_file if line.strip() != ""]
 
-proxy_index = 0
-
 for data_rw_value, href_value in urls:
-    # Set proxy for the driver
-    proxy = proxy_list[proxy_index]
-    proxy_options = Options()
-    proxy_options.add_argument(f"--proxy-server=http://{proxy}")
+    proxy_index = 0
+    while proxy_index < len(proxy_list):
+        proxy = proxy_list[proxy_index]
+        proxy_options = Options()
+        proxy_options.add_argument(f"--proxy-server=http://{proxy}")
 
-    tries = 0
-    while tries < 2:
-        driver = webdriver.Chrome(
-            executable_path=chrome_driver_path, options=proxy_options
-        )
-        driver.maximize_window()
+        try:
+            driver = webdriver.Chrome(
+                executable_path=chrome_driver_path, options=proxy_options
+            )
+            driver.maximize_window()
 
-        # Open URL
-        driver.get(href_value)
+            # Open URL
+            driver.get(href_value)
 
-        # Check if connection is successful
-        if "Title of Successful Connection Page" in driver.title:
-            # Do whatever you need to do on the page
-            # ...
+            # Check if connection is successful (you can modify the condition based on your requirement)
+            if "Page Title of Successful Connection" in driver.title:
+                # Do whatever you need to do on the page
+                # ...
 
+                # Close the driver
+                driver.close()
+
+                # Move to the next URL
+                break
+
+        except Exception as e:
+            print(f"Error occurred with proxy {proxy}: {str(e)}")
+
+        finally:
             # Close the driver
             driver.close()
 
-            # Move to the next proxy in the list
-            proxy_index = (proxy_index + 1) % len(proxy_list)
-
-            # Break out of the while loop and move to the next URL
-            break
-
-        # Increment the number of tries
-        tries += 1
-
-        # Close the driver
-        driver.close()
-
         # Move to the next proxy in the list
-        proxy_index = (proxy_index + 1) % len(proxy_list)
+        proxy_index += 1
