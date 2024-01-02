@@ -1,4 +1,3 @@
-python
 import urllib
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -28,17 +27,17 @@ for proxy in proxy_list:
         driver.get(website_url)
 
         # Wait for the URL to load completely
-        WebDriverWait(driver, 10).until(EC.url_to_be(website_url))
+        #WebDriverWait(driver, 10).until(EC.url_to_be(website_url))
 
         # Check if the div with class 'icon icon-generic' is present
-        is_icon_present = EC.presence_of_element_located((By.CSS_SELECTOR, 'div.icon.icon-generic'))
-        WebDriverWait(driver, 10).until(is_icon_present)
-
+        error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
+        
+    if len(error_element) > 0: 
         print("Proxy is bad")
         # Use the next proxy on the proxy list
         continue
 
-    except:
+    else:
         print("Good proxy")
         # Stay on the website for 10 seconds
         time.sleep(10)
