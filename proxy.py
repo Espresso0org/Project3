@@ -48,6 +48,9 @@ headings = driver.find_elements(By.CSS_SELECTOR, 'div.v5yQqb.jqWpsc')
 with open("url.txt", "w", encoding="utf-8") as file:
     file.truncate()
 
+    with open("websites.txt", "r") as websites_file:
+        websites = websites_file.read().splitlines()
+
     for heading in headings:
         element = heading.find_element(By.CSS_SELECTOR, 'a')
         data_rw = re.search(r'data-rw="([^"]+)"', element.get_attribute("outerHTML"))
@@ -58,11 +61,9 @@ with open("url.txt", "w", encoding="utf-8") as file:
             href_value = href.group(1)
             data_rw_value = data_rw_value.replace("amp;", "")
 
-            with open("websites.txt", "r") as websites_file:
-                websites = websites_file.read().splitlines()
-
-            if href_value in websites:
-                file.write(data_rw_value + "\n")
-                print("URLs grabbed successfully")
+            for website in websites:
+                if website in href_value:
+                    file.write(data_rw_value + "\n")
+                    print("URLs grabbed successfully")
 
 driver.quit()
