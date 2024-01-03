@@ -1,109 +1,51 @@
-import urllib
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.by import By
-import time
-import re
+python
+import tkinter as tk
+from tkinter import filedialog
 
-stay = int(input("Enter time to stay on each page in minutes: "))
-trynumb = input("Enter the number of tries per proxy: ")
-user_agent_type = int(input("Enter 1 for mobile user agent or 2 for desktop user agent: "))
+def run_script():
+    stay = int(stay_entry.get())
+    trynumb = int(try_entry.get())
+    user_agent_type = user_agent_var.get()
 
-chrome_driver_path = "chromedriver"
+    chrome_options = Options()
+    if user_agent_type == 1:
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36")
+    elif user_agent_type == 2:
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36")
 
-chrome_options = Options()
-if user_agent_type == 1:
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36")
-if user_agent_type == 2:
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36")
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.maximize_window()
 
-driver = webdriver.Chrome(executable_path=chrome_driver_path, options=chrome_options)
-driver.maximize_window()
+    # Rest of the code...
 
-root = "https://www.google.com/"
-url = "https://google.com/search?q="
+# Create the main window
+root = tk.Tk()
+root.title("Web Scraping Script")
+root.geometry("400x300")
 
-with open("keyword.txt", "r", encoding="utf-8") as file:
-    query = file.read().strip()
+# Stay on each page
+stay_label = tk.Label(root, text="Time to stay on each page (seconds):")
+stay_label.pack()
+stay_entry = tk.Entry(root)
+stay_entry.pack()
 
-query = urllib.parse.quote_plus(query)
-link = url + query
-driver.get(link)
+# Number of tries per proxy
+try_label = tk.Label(root, text="Number of tries per proxy:")
+try_label.pack()
+try_entry = tk.Entry(root)
+try_entry.pack()
 
-wait = WebDriverWait(driver, 15)
-wait.until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="tads"]/div[1]/div/div[1]/div/div[1]/a')))
-headings = driver.find_elements_by_css_selector('div.v5yQqb.jqWpsc')
+# User agent type
+user_agent_label = tk.Label(root, text="User agent type:")
+user_agent_label.pack()
+user_agent_var = tk.IntVar()
+user_agent_radio1 = tk.Radiobutton(root, text="Mobile", variable=user_agent_var, value=1)
+user_agent_radio1.pack()
+user_agent_radio2 = tk.Radiobutton(root, text="Desktop", variable=user_agent_var, value=2)
+user_agent_radio2.pack()
 
-# Open the file in write mode and truncate it to remove existing content
-with open("url.txt", "w", encoding="utf-8") as file:
-    file.truncate()
+# Run button
+run_button = tk.Button(root, text="Run Script", command=run_script)
+run_button.pack()
 
-    for heading in headings:
-        title = heading.find_elements_by_tag_name('h3')
-        element = heading.find_element_by_css_selector('a')
-        data_rw = re.search(r'data-rw="([^"]+)"', element.get_attribute("outerHTML"))
-        href = re.search(r'href="([^"]+)"', element.get_attribute("outerHTML"))
-
-        if data_rw and href:
-            data_rw_value = data_rw.group(1)
-            href_value = href.group(1)
-
-            data_rw_value = data_rw_value.replace("amp;", "")
-
-            # Write the data_rw_value to the file
-            file.write(data_rw_value + "\n")
-            print("url's grabbed succesfull")
-
-driver.quit()
-
-# Replace 'website_url' with the actual URL you want to visit
-website_url = 'https://www.google.com/aclk?sa=l&ai=DChcSEwiKiNH5pr6DAxVxLtQBHU3DCSUYABAAGgJvYQ&ae=2&gclid=EAIaIQobChMIiojR-aa-gwMVcS7UAR1NwwklEAAYASAAEgLe1_D_BwE&sig=AOD64_1qVlEybeHyYSdBB2AuVn--FxTNzQ&q&adurl'
-
-# Replace 'path_to_webdriver' with the actual path to your webdriver executable
-path_to_webdriver = 'chromedriver'
-
-proxy_list = []
-with open("proxy.txt", "r", encoding="utf-8") as file:
-    proxy_list = file.read().strip().split("\n")
-
-for proxy in proxy_list:
-    print(f"Trying proxy: {proxy}")
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument(f"--proxy-server=http://{proxy}")
-        driver = webdriver.Chrome(executable_path=path_to_webdriver, options=chrome_options)
-        driver.get(website_url)
-
-        # Wait for the URL to load completely
-        #WebDriverWait(driver, 10).until(EC.url_to_be(website_url))
-
-        # Check if the div with class 'icon icon-generic' is present
-        error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
-        
-        if len(error_element) > 0: 
-            print("Proxy is bad")
-            # Quit the webdriver
-            driver.quit()
-            # Use the next proxy on the proxy list
-            continue
-        else:
-            print("Good proxy")
-            # Stay on the website for 10 seconds
-            time.sleep(60*stay)
-            # Scroll to the end of the website
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            # Repeat the process 10 times with the good proxy
-            for _ in range(trynumb):
-                # Do something on the website if needed
-                # ...
-                pass
-
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        # Quit the webdriver in case of an error
-        driver.quit()
-        # Start from the beginning with the next proxy
-        continue
+root.mainloop()
