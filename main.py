@@ -14,7 +14,6 @@ stay = int(input("Enter time to stay on each page in seconds: "))
 trynumb = int(input("Enter the number of tries per proxy: "))
 user_agent_type = int(input("Enter 1 for mobile user agent or 2 for desktop user agent: "))
 
-#chrome_driver_path = "chromedriver"
 service = Service(executable_path='./chromedriver.exe')
 
 chrome_options = Options()
@@ -35,11 +34,9 @@ with open("keyword.txt", "r", encoding="utf-8") as file:
 query = urllib.parse.quote_plus(query)
 link = url + query
 driver.get(link)
-botton_element = driver.find_elements(By.CSS_SELECTOR, 'button#L2AGLb.tHlp8d')
-if len(botton_element) > 0:
-    #button = driver.find_elements_by_id('//*[@id="L2AGLb"]')
+button_element = driver.find_elements(By.CSS_SELECTOR, 'button#L2AGLb.tHlp8d')
+if len(button_element) > 0:
     button = driver.find_element(By.XPATH, '//*[@id="L2AGLb"]')
-    
     button.click()
 
 wait = WebDriverWait(driver, 15)
@@ -50,22 +47,24 @@ headings = driver.find_elements(By.CSS_SELECTOR, 'div.v5yQqb.jqWpsc')
 with open("url.txt", "w", encoding="utf-8") as file:
     file.truncate()
 
+    with open("websites.txt", "r") as websites_file:
+        websites = websites_file.read().splitlines()
+
     for heading in headings:
-        #title = heading.find_elements_by_tag_name('h3')
         element = heading.find_element(By.CSS_SELECTOR, 'a')
         data_rw = re.search(r'data-rw="([^"]+)"', element.get_attribute("outerHTML"))
         href = re.search(r'href="([^"]+)"', element.get_attribute("outerHTML"))
-        
 
         if data_rw and href:
             data_rw_value = data_rw.group(1)
             href_value = href.group(1)
             data_rw_value = data_rw_value.replace("amp;", "")
-            
 
-            # Write the data_rw_value to the file
-            file.write(data_rw_value + "\n")
-            print("URLs grabbed successfully")
+            for website in websites:
+                #print(website)
+                if website in href_value:
+                   file.write(data_rw_value + "\n")
+                   print("URLs grabbed successfully")
 
 driver.quit()
 
@@ -110,7 +109,7 @@ for proxy in proxy_list:
                     error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
                     if len(error_element) > 0:
                         print("proxy down")
-                        break
+                        continue
                     print("Good proxy")
                     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
                     time.sleep(stay)
@@ -124,6 +123,4 @@ for proxy in proxy_list:
         
         print("An error occurred:")
         driver.quit()
-        continue
-
-
+        continue 
