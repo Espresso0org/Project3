@@ -1,126 +1,57 @@
-import urllib
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-import time
-import re
+python
+import requests
 
-stay = int(input("Enter time to stay on each page in seconds: "))
-trynumb = int(input("Enter the number of tries per proxy: "))
-user_agent_type = int(input("Enter 1 for mobile user agent or 2 for desktop user agent: "))
+# Replace 'YOUR_API_ENDPOINT' with your actual SheetDB API endpoint
+api_endpoint = 'YOUR_API_ENDPOINT'
 
-service = Service(executable_path='./chromedriver.exe')
+# Make a GET request to get the data
+response = requests.get(api_endpoint)
 
-chrome_options = Options()
-if user_agent_type == 1:
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36")
-if user_agent_type == 2:
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36")
-
-driver = webdriver.Chrome(service=service, options=chrome_options)
-driver.maximize_window()
-
-root = "https://www.google.com/"
-url = "https://google.com/search?q="
-
-with open("keyword.txt", "r", encoding="utf-8") as file:
-    query = file.read().strip()
-
-query = urllib.parse.quote_plus(query)
-link = url + query
-driver.get(link)
-button_element = driver.find_elements(By.CSS_SELECTOR, 'button#L2AGLb.tHlp8d')
-if len(button_element) > 0:
-    button = driver.find_element(By.XPATH, '//*[@id="L2AGLb"]')
-    button.click()
-
-wait = WebDriverWait(driver, 15)
-wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.v5yQqb.jqWpsc')))
-headings = driver.find_elements(By.CSS_SELECTOR, 'div.v5yQqb.jqWpsc')
-
-# Open the file in write mode and truncate it to remove existing content
-with open("url.txt", "w", encoding="utf-8") as file:
-    file.truncate()
-
-    with open("websites.txt", "r") as websites_file:
-        websites = websites_file.read().splitlines()
-
-    for heading in headings:
-        element = heading.find_element(By.CSS_SELECTOR, 'a')
-        data_rw = re.search(r'data-rw="([^"]+)"', element.get_attribute("outerHTML"))
-        href = re.search(r'href="([^"]+)"', element.get_attribute("outerHTML"))
-
-        if data_rw and href:
-            data_rw_value = data_rw.group(1)
-            href_value = href.group(1)
-            data_rw_value = data_rw_value.replace("amp;", "")
-
-            for website in websites:
-                #print(website)
-                if website in href_value:
-                   file.write(data_rw_value + "\n")
-                   print("URLs grabbed successfully")
-
-driver.quit()
-
-# Replace 'path_to_webdriver' with the actual path to your webdriver executable
-#path_to_webdriver = 'chromedriver'
-service = Service(executable_path='./chromedriver.exe')
-
-proxy_list = []
-with open("proxy.txt", "r", encoding="utf-8") as file:
-    proxy_list = file.read().strip().split("\n")
-
-with open("url.txt", "r", encoding="utf-8") as file:
-    urls = file.read().strip().split("\n")
-
-for proxy in proxy_list:
-    print(f"Trying proxy: {proxy}")
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument(f"--proxy-server=http://{proxy}")
-
+# Check if the request was successful
+if response.status_code == 200:
+    data = response.json()
+    
+    # Extract unique names from the 'Name' column
+    unique_names = set(entry['Name'] for entry in data if 'Name' in entry)
+    
+    if len(unique_names) > 0:
+        print("Available names:")
+        for name in unique_names:
+            print(name)
         
-        #for website_url in urls:
-            #print(f"Opening URL: {website_url}")
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.get("https://google.com")
-
-        error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
-
-        if len(error_element) > 0: 
-            print("Proxy is bad")
-            driver.quit()
-            continue
+        # Get user input for the name
+        selected_name = input("Enter the name to retrieve the data from the 'Activity points' column: ")
+        
+        # Find the data for the selected name in the 'Activity points' column
+        activity_points = None
+        for entry in data:
+            if 'Name' in entry and 'Activity points' in entry and entry['Name'] == selected_name:
+                activity_points = entry['Activity points']
+                break
+        
+        if activity_points is not None:
+            print(f"Activity points for {selected_name}: {activity_points}")
+            
+            # Get user input for the new activity points value
+            new_activity_points = input("Enter the new activity points value: ")
+            
+            # Update the 'Activity points' for the selected name
+            for entry in data:
+                if 'Name' in entry and 'Activity points' in entry and entry['Name'] == selected_name:
+                    entry['Activity points'] = new_activity_points
+            
+            # Make a PATCH request to update the 'Activity points' for the selected name
+            response = requests.patch(api_endpoint, json=data)
+            
+            # Check if the request was successful
+            if response.status_code == 200:
+                print(f"Activity points for {selected_name} updated successfully.")
+            else:
+                print("Failed to update activity points. Status code:", response.status_code)
+            
         else:
-            for _ in range(trynumb):
-                driver.quit()
-                
-                
-                for website_url in urls:    
-                    print(f"Opening URL: {website_url}")
-                    driver = webdriver.Chrome(service=service, options=chrome_options)
-                    driver.get(website_url)
-                    error_element = driver.find_elements(By.CSS_SELECTOR, 'div.icon.icon-generic')
-                    if len(error_element) > 0:
-                        print("proxy down")
-                        continue
-                    print("Good proxy")
-                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                    time.sleep(stay)
-                    driver.quit()
-                    
-                # driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-                driver.quit()
-
-    except Exception as e:
-        
-        print("An error occurred:")
-        driver.quit()
-        continue 
+            print(f"No data found for {selected_name}.")
+    else:
+        print("No data found in the Google Sheet.")
+else:
+    print("Failed to fetch data. Status code:", response.status_code)
