@@ -1,57 +1,60 @@
 python
-import requests
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# Replace 'YOUR_API_ENDPOINT' with your actual SheetDB API endpoint
-api_endpoint = 'YOUR_API_ENDPOINT'
+# Define the scope and credentials
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_name('key.json', scope)
+client = gspread.authorize(creds)
 
-# Make a GET request to get the data
-response = requests.get(api_endpoint)
+# Access the Google Sheet by its URL
+sheet = client.open_by_url('YOUR_GOOGLE_SHEET_URL')
 
-# Check if the request was successful
-if response.status_code == 200:
-    data = response.json()
-    
-    # Extract unique names from the 'Name' column
-    unique_names = set(entry['Name'] for entry in data if 'Name' in entry)
-    
-    if len(unique_names) > 0:
-        print("Available names:")
-        for name in unique_names:
-            print(name)
-        
-        # Get user input for the name
-        selected_name = input("Enter the name to retrieve the data from the 'Activity points' column: ")
-        
-        # Find the data for the selected name in the 'Activity points' column
-        activity_points = None
-        for entry in data:
-            if 'Name' in entry and 'Activity points' in entry and entry['Name'] == selected_name:
-                activity_points = entry['Activity points']
-                break
-        
-        if activity_points is not None:
-            print(f"Activity points for {selected_name}: {activity_points}")
+# Select the first worksheet
+worksheet = sheet.get_worksheet(0)
+
+# Get all values and headers from the worksheet
+values = worksheet.get_all_values()
+headers = values[0]
+
+# Find the index of the "Name & Family" column and "Rob status points" column
+name_family_index = headers.index("Name & Family")
+rob_status_index = headers.index("Rob status points")
+
+def print_non_empty_values():
+    for i, row in enumerate(values[1:], start=1):  # Skip the header row
+        if row[name_family_index] != '':
+            print(f"{i}. {row[name_family_index]}")
+
+def update_rob_status_points(row_num, points):
+    current_points = int(values[row_num][rob_status_index])
+    new_points = current_points + points
+    worksheet.update_cell(row_num + 1, rob_status_index + 1, str(new_points))
+    print(f"Rob status points updated successfully to {new_points}!")
+
+# Main loop
+while True:
+    print_non_empty_values()
+    print("Enter the row number to update Rob status points, or type 'back' to go back.")
+
+    user_input = input("Your choice: ")
+
+    if user_input.lower() == 'back':
+        break
+    elif user_input.isdigit():
+        row_num = int(user_input)
+        if 1 <= row_num <= len(values) - 1:
+            print("1. 10-10 (Add 2 points to Rob status points)")
+            print("2. 10-11 (Add 1 point to Rob status points)")
             
-            # Get user input for the new activity points value
-            new_activity_points = input("Enter the new activity points value: ")
-            
-            # Update the 'Activity points' for the selected name
-            for entry in data:
-                if 'Name' in entry and 'Activity points' in entry and entry['Name'] == selected_name:
-                    entry['Activity points'] = new_activity_points
-            
-            # Make a PATCH request to update the 'Activity points' for the selected name
-            response = requests.patch(api_endpoint, json=data)
-            
-            # Check if the request was successful
-            if response.status_code == 200:
-                print(f"Activity points for {selected_name} updated successfully.")
+            action_input = input("Choose an action: ")
+            if action_input == '1':
+                update_rob_status_points(row_num, 2)
+            elif action_input == '2':
+                update_rob_status_points(row_num, 1)
             else:
-                print("Failed to update activity points. Status code:", response.status_code)
-            
+                print("Invalid action. Please try again.")
         else:
-            print(f"No data found for {selected_name}.")
+            print("Invalid row number. Please try again.")
     else:
-        print("No data found in the Google Sheet.")
-else:
-    print("Failed to fetch data. Status code:", response.status_code)
+        print("Invalid input. Please try again.")
