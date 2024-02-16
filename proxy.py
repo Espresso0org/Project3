@@ -1,69 +1,7 @@
 python
-import urllib
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-import time
-import re
-
-stay = int(input("Enter time to stay on each page in seconds: "))
-trynumb = int(input("Enter the number of tries per proxy: "))
-user_agent_type = int(input("Enter 1 for mobile user agent or 2 for desktop user agent: "))
-
-service = Service(executable_path='./chromedriver.exe')
-
-chrome_options = Options()
-if user_agent_type == 1:
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Linux; Android 10; Pixel 3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Mobile Safari/537.36")
-if user_agent_type == 2:
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.198 Safari/537.36")
-
-driver = webdriver.Chrome(service=service, options=chrome_options)
-driver.maximize_window()
-
-root = "https://www.google.com/"
-url = "https://google.com/search?q="
-
-with open("keyword.txt", "r", encoding="utf-8") as file:
-    query = file.read().strip()
-
-query = urllib.parse.quote_plus(query)
-link = url + query
-driver.get(link)
-button_element = driver.find_elements(By.CSS_SELECTOR, 'button#L2AGLb.tHlp8d')
-if len(button_element) > 0:
-    button = driver.find_element(By.XPATH, '//*[@id="L2AGLb"]')
-    button.click()
-
-wait = WebDriverWait(driver, 15)
-wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.v5yQqb.jqWpsc')))
-headings = driver.find_elements(By.CSS_SELECTOR, 'div.v5yQqb.jqWpsc')
-
-# Open the file in write mode and truncate it to remove existing content
-with open("url.txt", "w", encoding="utf-8") as file:
-    file.truncate()
-
-    with open("websites.txt", "r") as websites_file:
-        websites = websites_file.read().splitlines()
-
-    for heading in headings:
-        element = heading.find_element(By.CSS_SELECTOR, 'a')
-        data_rw = re.search(r'data-rw="([^"]+)"', element.get_attribute("outerHTML"))
-        href = re.search(r'href="([^"]+)"', element.get_attribute("outerHTML"))
-
-        if data_rw and href:
-            data_rw_value = data_rw.group(1)
-            href_value = href.group(1)
-            data_rw_value = data_rw_value.replace("amp;", "")
-
-            for website in websites:
-                if website in href_value:
-                    file.write(data_rw_value + "\n")
-                    print("URLs grabbed successfully")
-
-driver.quit()
+def print_non_empty_values(values, name_family_index):
+    count = 1
+    for row in values[1:]:  # Skip the header row
+        if row[name_family_index] != '':
+            print(f"{count}. {row[name_family_index]}")
+            count += 1
