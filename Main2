@@ -1,37 +1,13 @@
-python
-import urllib
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-import time
-import re
-
-# ... (previous code remains unchanged)
-
-# Replace 'path_to_webdriver' with the actual path to your webdriver executable
-service = Service(executable_path='./chromedriver.exe')
-
-proxy_list = [
-    {"ip": "your_proxy_ip", "port": "your_proxy_port", "username": "your_username", "password": "your_password"},
-    # Add more proxies in a similar format if needed
-]
-
-with open("url.txt", "r", encoding="utf-8") as file:
-    urls = file.read().strip().split("\n")
-
-for proxy in proxy_list:
-    print(f"Trying proxy: {proxy['ip']}:{proxy['port']}")
-    try:
-        chrome_options = Options()
-        proxy_with_auth = f"{proxy['ip']}:{proxy['port']}@{proxy['username']}:{proxy['password']}"
-        chrome_options.add_argument(f"--proxy-server=http://{proxy_with_auth}")
-
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        # Rest of your code for using the proxy
-        # ...
-        
-    except Exception as e:
-        print("An error occurred:")
-        driver.quit()
-        continue
+{
+  "type": "service_account",
+  "project_id": "diamond-project-414422",
+  "private_key_id": "461d19ee6e16ca8cfd31880cd673cc931b98a0db",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC8pFQZAMJFlGDw\nPtisl7BUSmA4C1mF1bcwq9hjxPHX1xZfTqfeHO1KgJzBi64A7oq0pmyVzykh5aYj\nrTlGT2x6KTjumHrkQYYKoT0Fs7Fegfi4mEDV7fH3vN+XEKnXDJ9d721Ui1oaQ6S6\nq5S9pklJlkdXXfUYdbJjxJSWMcj2YvZRqfdP4bJUg8BXBfhs9R1m1UngmaKW7+jp\nCcT85LQGt/RSHCqptNaJb2VA7RHnyk/7nMRyHmimO0XhdCA1lYSIKrsFtyBI8d+B\nRl4TxZTFnCZYgLupaNqodsB/U7ZSW1PIELmMkbPpxr8D1nawovIlGkBvf8TaVnAA\nvjDW2RFhAgMBAAECggEABfXps/VY+u3ag+M+4XIH+YHbUt048bunbPt6r0+OL+3B\n7Taeo0Wl62nvVt/dANzvHd1fjPqqW0HWyawz8eUy9+EzK7oLSzvh/ZZlFGsLIOgm\ncPhbaoCsQDgdlusveQ+spKea4sYy2j8zU03coBypY112P59Ezh/Z7sEYmNS8SHZM\nb6OKvArc1nEM7JEUYk/84kJfqpl3lcDRJfy1q3QLy0m2feLZRyE1UmSWQXCNfHgq\ncwET579p1MKeaPu28UJpvpnKDFjGOUmu6qaXsfNUGUwRsCMZwa7dVlT12REKA1iN\nVGZoFfsAGQgPf1heqyDjGFHOHUWugwE2pLcBJevLyQKBgQD7WaW/B7Qx2Z8FEPnH\nFZdE8SkeZiTciFUknl3wvnUOqnZmS+JXg+I0acljOZ49A0IgM7SXHlz0YkgZz/iV\nHcExTD8/GyR+R6pQ6vSHev+SoB+DD0QxxeEyHtgAzLK6mOAhdkNWy7Il4Qvp8Uqe\nYgwYzyt/6N0l0z7i9ydaQwmzswKBgQDAIbSCtJJFILYhL9gnOtZ0C/FCjMK7kj0l\ndZxk0GWNaQaKEYhOOu1UY43L4MknciYdF7o5lmYfosmwDHkH1Sb6vhQ/xNcMwj4v\nja1gPxgJ+yMpK3gjbnSke7AiAAGsA4lBbqn4JFSK6jMtKn8JLPgWpvfMEBShBQyR\nMzhCHU+smwKBgQD0txiPf/Gp40ZWyWtWsKfBoMa26R4UdMvoxiOSI+yWJdL20AUD\nzcyr2R8Q82Uj5As6jPzTcOVxrkqijwBoNjsFQ0YEq+mA5UdmVwtS6Kbx2+IyWOe9\nSfpyMON/C80rrXHyQlFXrSS6inxt/dX3lGBQu0uP0mmVzTFaCuYOlFxazwKBgQCF\nc6PfGa9zhpobCRF5hjvJFTZ5xC3KfXQtXbjIqZuwEmAxbKYhuHp6oD+wei0eUgI5\nOO7n6xh6JucyeidjEmHlzjtgY8f/m7f37c+cR5bZ7+9nPENRUPqB+UvJAfonUbl3\nkndK3Wk/qBbt61ObuvmDOmxp+E1r3obxIAOWoKdjuwKBgQDP3w9BsN3+/2++a53q\nWGqulFn8hT2dAMyQpNwAyubfEMslm3h9J8vPSJy71Dh9EGUHD59WZZYCwRA/XRbd\nXWm/8wLmS+THlw2dHhRPw9HaWUmH+pRREU35Fud3mwHabyJxJp73nox/VcE6/nmc\n6LE4HnjeuEzN2G5ZvQCdR7mrmg==\n-----END PRIVATE KEY-----\n",
+  "client_email": "amirreza@diamond-project-414422.iam.gserviceaccount.com",
+  "client_id": "107226243823917428707",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/amirreza%40diamond-project-414422.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
