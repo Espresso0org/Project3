@@ -12,7 +12,12 @@ def get_email_content(message_id):
     print('From:', sender)
     print('Subject:', subject)
     
-    msg_str = base64.urlsafe_b64decode(payload['body']['data']).decode('utf-8')
-    msg = email.message_from_string(msg_str)
+    parts = payload.get('parts', [])
+    message_content = ''
     
-    print('Message:', msg.get_payload())
+    for part in parts:
+        if part['body'].get('data'):
+            part_data = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+            message_content += part_data
+    
+    print('Message:', message_content)
