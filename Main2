@@ -3,9 +3,20 @@ from selenium import webdriver
 # Initialize Chrome driver
 driver = webdriver.Chrome(executable_path='./chromedriver.exe')
 
-# Open a URL (e.g., Google)
-url_to_open = 'https://www.google.com'
-driver.get(url_to_open)
+# Open the URL with CAPTCHA
+url_with_captcha = 'https://example.com'  # Replace with the actual URL
+driver.get(url_with_captcha)
+
+# Wait for CAPTCHA to load (you may need to adjust the wait time)
+# You can use explicit waits or sleep here
+# Example: time.sleep(5)
+
+# Find the CAPTCHA element (you'll need to inspect the page to find the correct selector)
+captcha_element = driver.find_element_by_id('recaptcha_image')  # Adjust the selector
+
+# Extract the CAPTCHA URL
+captcha_url = captcha_element.get_attribute('src')
+print(f"CAPTCHA URL: {captcha_url}")
 
 # Close the browser window
 driver.close()
