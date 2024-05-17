@@ -1,1 +1,14 @@
-//*[@id="register_form"]/div[2]/div[1]/img
+import requests
+from bs4 import BeautifulSoup
+
+url = "your_target_url_here"
+response = requests.get(url)
+soup = BeautifulSoup(response.text, "html.parser")
+
+# Find the img element with the specified XPath
+captcha_img = soup.select_one("#register_form > div:nth-child(2) > div:nth-child(1) > img")
+if captcha_img:
+    captcha_src = captcha_img["src"]
+    print(f"Captcha image source: {captcha_src}")
+else:
+    print("Captcha image not found.")
