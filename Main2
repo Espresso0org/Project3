@@ -1,15 +1,1 @@
-import cv2
-import numpy as np
-
-# Load your image (replace 'your_image.jpg' with the actual image path)
-image = cv2.imread('your_image.jpg')
-
-# Convert the image to grayscale (optional)
-gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-# Apply the sharpening filter (adjust the kernel size and strength as needed)
-kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-sharpened_image = cv2.filter2D(gray_image, -1, kernel)
-
-# Save or display the sharpened image
-cv2.imwrite('sharpened_image.jpg', sharpened_image)
+//*[@id="register_form"]/div[2]/div[1]/img
