@@ -35,11 +35,25 @@ def mark_as_read(message_id):
 def get_email_content(message_id):
     service = authenticate()
     message = service.users().messages().get(userId='me', id=message_id, format='full').execute()
-    msg_str = base64.urlsafe_b64decode(message['payload']['parts'][0]['body']['data']).decode('utf-8')
-    msg = email.message_from_string(msg_str)
-    print('From:', msg['From'])
-    print('Subject:', msg['Subject'])
-    print('Message:', msg.get_payload())
+    
+    payload = message['payload']
+    headers = payload['headers']
+    
+    subject = next((header['value'] for header in headers if header['name'] == 'Subject'), None)
+    sender = next((header['value'] for header in headers if header['name'] == 'From'), None)
+    
+    print('From:', sender)
+    print('Subject:', subject)
+    
+    parts = payload.get('parts', [])
+    message_content = ''
+    
+    for part in parts:
+        if part['body'].get('data'):
+            part_data = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+            message_content += part_data
+    
+    print('Message:', message_content)
 
 def check_and_process_unread_emails():
     service = authenticate()
