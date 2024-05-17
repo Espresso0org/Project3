@@ -1,22 +1,70 @@
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+import time
+import requests
 
-# Initialize Chrome driver
-driver = webdriver.Chrome(executable_path='./chromedriver.exe')
+# Set up Chrome options
+options = webdriver.ChromeOptions()
+options.add_argument('--start-maximized')
 
-# Open the URL with CAPTCHA
-url_with_captcha = 'https://example.com'  # Replace with the actual URL
-driver.get(url_with_captcha)
+# Initialize the Chrome driver
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options )
 
-# Wait for CAPTCHA to load (you may need to adjust the wait time)
-# You can use explicit waits or sleep here
-# Example: time.sleep(5)
+# URL to navigate to
+url = "https://evisatraveller.mfa.ir/fa/request/applyrequest/"
+refresh_url = "https://evisatraveller.mfa.ir/ecaptcha/refresh/"
 
-# Find the CAPTCHA element (you'll need to inspect the page to find the correct selector)
-captcha_element = driver.find_element_by_id('recaptcha_image')  # Adjust the selector
+def load_image(driver):
+    try:
+        # Find the specific div using the full XPath
+        div_xpath = "/html/body/section[1]/div/div/div/div/div[1]/div/div[2]/div/div[2]/div[3]/form/div[5]/div[1]"
+        div_element = driver.find_element(By.XPATH, div_xpath)
 
-# Extract the CAPTCHA URL
-captcha_url = captcha_element.get_attribute('src')
-print(f"CAPTCHA URL: {captcha_url}")
+        # Find the img tag within the div
+        img_element = div_element.find_element(By.TAG_NAME, 'img')
 
-# Close the browser window
-driver.close()
+        # Get the src attribute of the img tag
+        img_src = img_element.get_attribute('src')
+
+        # Print the image source URL
+        print("Image Source URL:", img_src)
+
+        # Open the image URL in a new tab
+        driver.execute_script(f"window.open('{img_src}', '_blank');")
+        
+        return True
+    except Exception as e:
+        print("Image not found, refreshing captcha...")
+        return False
+
+# Open the webpage
+driver.get(url)
+
+# Wait for 20 seconds to ensure the page loads completely
+time.sleep(20)
+
+# Try to load the image
+if not load_image(driver):
+    # If image not found, refresh captcha and try again
+    requests.get(refresh_url)
+    
+    # Wait for a few seconds to ensure captcha is refreshed
+    time.sleep(5)
+    
+    # Reload the webpage
+    driver.get(url)
+    
+    # Wait for 20 seconds to ensure the page loads completely
+    time.sleep(20)
+    
+    # Try to load the image again
+    if not load_image(driver):
+        print("Failed to load image after refreshing captcha.")
+
+# Keep the browser open and wait for user input to close
+input("Press Enter to close the browser...")
+
+# Close the browser when the user presses Enter
+driver.quit()
