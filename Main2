@@ -1,14 +1,1 @@
-import requests
-from bs4 import BeautifulSoup
-
-url = "your_target_url_here"
-response = requests.get(url)
-soup = BeautifulSoup(response.text, "html.parser")
-
-# Find the img element with the specified XPath
-captcha_img = soup.select_one("#register_form > div:nth-child(2) > div:nth-child(1) > img")
-if captcha_img:
-    captcha_src = captcha_img["src"]
-    print(f"Captcha image source: {captcha_src}")
-else:
-    print("Captcha image not found.")
+requests.exceptions.SSLError: HTTPSConnectionPool(host='evisatraveller.mfa.ir', port=443): Max retries exceeded with url: /fa/request/confirm/IZGBM9K1JBE75682I5/6051971/ (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: EE certificate key too weak (_ssl.c:1002)')))
