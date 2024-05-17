@@ -1,6 +1,17 @@
-python
-def update_points(row_num, points, column_index, column_name):
-    current_points = int(values[row_num][column_index]) if values[row_num][column_index] else 0
-    new_points = current_points + points
-    worksheet.update_cell(row_num + 1, column_index + 1, str(new_points))
-    print(f"{column_name} points updated successfully to {new_points}!")
+from PIL import Image
+import requests
+import pytesseract
+from io import BytesIO
+
+# Replace 'your_image_url_here' with the actual image URL
+image_url = 'your_image_url_here'
+
+# Download the image from the URL
+response = requests.get(image_url)
+image = Image.open(BytesIO(response.content))
+
+# Perform OCR and extract text
+text = pytesseract.image_to_string(image)
+
+# Print the recognized text
+print(text)
