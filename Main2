@@ -1,72 +1,26 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-import time
+Here is a simple Python script using the `requests` library to send a GET request to a specified URL:
+
+```python
 import requests
 
-# Set up Chrome options
-options = webdriver.ChromeOptions()
-options.add_argument('--start-maximized')
+url = "https://www.example.com"  # Replace this with the URL you want to request
 
-# Specify the path to your local Chrome driver executable
-chrome_driver_path = '/path/to/your/chromedriver'  # Replace with the actual path
+# Send a GET request to the URL
+response = requests.get(url)
 
-# Initialize the Chrome driver
-driver = webdriver.Chrome(executable_path=chrome_driver_path, options=options)
+# Check if the request was successful
+if response.status_code == 200:
+    print("Request was successful")
+    print("Response:")
+    print(response.text)
+else:
+    print("Request was not successful. Status code:", response.status_code)
+```
 
-# URL to navigate to
-url = "https://evisatraveller.mfa.ir/fa/request/applyrequest/"
-refresh_url = "https://evisatraveller.mfa.ir/ecaptcha/refresh/"
+Make sure you have the `requests` library installed. You can install it using the following command:
 
-def load_image(driver):
-    try:
-        # Find the specific div using the full XPath
-        div_xpath = "/html/body/section[1]/div/div/div/div/div[1]/div/div[2]/div/div[2]/div[3]/form/div[5]/div[1]"
-        div_element = driver.find_element(By.XPATH, div_xpath)
+```
+pip install requests
+```
 
-        # Find the img tag within the div
-        img_element = div_element.find_element(By.TAG_NAME, 'img')
-
-        # Get the src attribute of the img tag
-        img_src = img_element.get_attribute('src')
-
-        # Print the image source URL
-        print("Image Source URL:", img_src)
-
-        # Open the image URL in a new tab
-        driver.execute_script(f"window.open('{img_src}', '_blank')")
-
-        return True
-    except Exception as e:
-        print("Image not found, refreshing captcha...")
-        return False
-
-try:
-    # Open the webpage
-    driver.get(url)
-
-    # Wait for 20 seconds to ensure the page loads completely
-    time.sleep(20)
-
-    # Try to load the image
-    if not load_image(driver):
-        # If image not found, refresh captcha and try again
-        requests.get(refresh_url)
-
-        # Wait for a few seconds to ensure captcha is refreshed
-        time.sleep(5)
-
-        # Reload the webpage
-        driver.get(url)
-
-        # Wait for 20 seconds to ensure the page loads completely
-        time.sleep(20)
-
-        # Try to load the image again
-        if not load_image(driver):
-            print("Failed to load image after refreshing captcha.")
-except Exception as e:
-    print(f"An error occurred: {str(e)}")
-finally:
-    # Close the browser
-    driver.quit()
+Replace `"https://www.example.com"` with the URL you want to request. Run this script in a Python environment to send a GET request to that URL.
