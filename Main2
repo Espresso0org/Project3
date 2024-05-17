@@ -1,1 +1,11 @@
-requests.exceptions.SSLError: HTTPSConnectionPool(host='evisatraveller.mfa.ir', port=443): Max retries exceeded with url: /fa/request/confirm/IZGBM9K1JBE75682I5/6051971/ (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: EE certificate key too weak (_ssl.c:1002)')))
+from selenium import webdriver
+
+# Initialize Chrome driver
+driver = webdriver.Chrome(executable_path='./chromedriver.exe')
+
+# Open a URL (e.g., Google)
+url_to_open = 'https://www.google.com'
+driver.get(url_to_open)
+
+# Close the browser window
+driver.close()
