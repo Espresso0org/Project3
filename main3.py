@@ -1,17 +1,12 @@
 from PIL import Image
-import requests
 import pytesseract
-from io import BytesIO
 
-# Replace 'your_image_url_here' with the actual image URL
-image_url = 'your_image_url_here'
-
-# Download the image from the URL
-response = requests.get(image_url)
-image = Image.open(BytesIO(response.content))
+# Load the CAPTCHA image (replace 'captcha.png' with your image file)
+image_path = 'captcha.png'
+image = Image.open(image_path)
 
 # Perform OCR and extract text
-text = pytesseract.image_to_string(image)
+captcha_text = pytesseract.image_to_string(image)
 
 # Print the recognized text
-print(text)
+print(f"Captcha text: {captcha_text}")
