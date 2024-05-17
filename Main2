@@ -1,6 +1,5 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 import time
 import requests
@@ -9,8 +8,11 @@ import requests
 options = webdriver.ChromeOptions()
 options.add_argument('--start-maximized')
 
+# Specify the path to your local Chrome driver executable
+chrome_driver_path = '/path/to/your/chromedriver'  # Replace with the actual path
+
 # Initialize the Chrome driver
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options )
+driver = webdriver.Chrome(executable_path=chrome_driver_path, options=options)
 
 # URL to navigate to
 url = "https://evisatraveller.mfa.ir/fa/request/applyrequest/"
@@ -32,39 +34,39 @@ def load_image(driver):
         print("Image Source URL:", img_src)
 
         # Open the image URL in a new tab
-        driver.execute_script(f"window.open('{img_src}', '_blank');")
-        
+        driver.execute_script(f"window.open('{img_src}', '_blank')")
+
         return True
     except Exception as e:
         print("Image not found, refreshing captcha...")
         return False
 
-# Open the webpage
-driver.get(url)
-
-# Wait for 20 seconds to ensure the page loads completely
-time.sleep(20)
-
-# Try to load the image
-if not load_image(driver):
-    # If image not found, refresh captcha and try again
-    requests.get(refresh_url)
-    
-    # Wait for a few seconds to ensure captcha is refreshed
-    time.sleep(5)
-    
-    # Reload the webpage
+try:
+    # Open the webpage
     driver.get(url)
-    
+
     # Wait for 20 seconds to ensure the page loads completely
     time.sleep(20)
-    
-    # Try to load the image again
+
+    # Try to load the image
     if not load_image(driver):
-        print("Failed to load image after refreshing captcha.")
+        # If image not found, refresh captcha and try again
+        requests.get(refresh_url)
 
-# Keep the browser open and wait for user input to close
-input("Press Enter to close the browser...")
+        # Wait for a few seconds to ensure captcha is refreshed
+        time.sleep(5)
 
-# Close the browser when the user presses Enter
-driver.quit()
+        # Reload the webpage
+        driver.get(url)
+
+        # Wait for 20 seconds to ensure the page loads completely
+        time.sleep(20)
+
+        # Try to load the image again
+        if not load_image(driver):
+            print("Failed to load image after refreshing captcha.")
+except Exception as e:
+    print(f"An error occurred: {str(e)}")
+finally:
+    # Close the browser
+    driver.quit()
