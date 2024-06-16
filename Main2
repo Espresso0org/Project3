@@ -3,6 +3,7 @@ from tkinter import ttk
 from tkinter import messagebox
 from tkcalendar import DateEntry
 import sqlite3
+from datetime import datetime, timedelta
 
 # ایجاد و اتصال به دیتابیس
 conn = sqlite3.connect('activity_database.db')
@@ -42,6 +43,40 @@ def load_names():
     for row in c.fetchall():
         names_listbox.insert(tk.END, row)
 
+# تابع برای محاسبه میانگین فعالیت روزانه
+def calculate_average_activity(name_id):
+    c.execute("SELECT start_time, end_time, date FROM activities WHERE name_id=?", (name_id,))
+    activities = c.fetchall()
+    total_minutes = 0
+    daily_totals = {}
+    for start_time, end_time, date in activities:
+        start_dt = datetime.strptime(start_time, "%H:%M")
+        end_dt = datetime.strptime(end_time, "%H:%M")
+        duration = (end_dt - start_dt).total_seconds() / 60
+        total_minutes += duration
+        if date not in daily_totals:
+            daily_totals[date] = 0
+        daily_totals[date] += duration
+    average_daily = total_minutes / len(daily_totals) if daily_totals else 0
+    return average_daily
+
+# تابع برای محاسبه میانگین فعالیت هفتگی
+def calculate_weekly_activity(name_id):
+    c.execute("SELECT start_time, end_time, date FROM activities WHERE name_id=?", (name_id,))
+    activities = c.fetchall()
+    weekly_totals = {}
+    for start_time, end_time, date in activities:
+        start_dt = datetime.strptime(start_time, "%H:%M")
+        end_dt = datetime.strptime(end_time, "%H:%M")
+        duration = (end_dt - start_dt).total_seconds() / 60
+        week_start = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=datetime.strptime(date, "%Y-%m-%d").weekday())
+        week_start_str = week_start.strftime("%Y-%m-%d")
+        if week_start_str not in weekly_totals:
+            weekly_totals[week_start_str] = 0
+        weekly_totals[week_start_str] += duration
+    average_weekly = sum(weekly_totals.values()) / len(weekly_totals) if weekly_totals else 0
+    return average_weekly
+
 # تابع برای باز کردن پنجره اکتیویتی
 def open_activity_window():
     selected = names_listbox.curselection()
@@ -76,8 +111,29 @@ def open_activity_window():
         save_button = ttk.Button(activity_window, text="ذخیره", command=save_activity)
         save_button.grid(row=3, column=0, columnspan=2, pady=10)
 
+        # نمایش میانگین فعالیت روزانه و هفتگی
+        avg_daily = calculate_average_activity(name_id)
+        avg_weekly = calculate_weekly_activity(name_id)
+
+        ttk.Label(activity_window, text=f"میانگین فعالیت روزانه: {avg_daily:.2f} دقیقه").grid(row=4, column=0, columnspan=2, padx=5, pady=5)
+        ttk.Label(activity_window, text=f"میانگین فعالیت هفتگی: {avg_weekly:.2f} دقیقه").grid(row=5, column=0, columnspan=2, padx=5, pady=5)
     else:
         messagebox.showwarning("خطا", "لطفاً یک نام انتخاب کنید")
+
+# تابع برای جستجوی اسامی با میانگین فعالیت روزانه کمتر از مقدار مشخص شده
+def search_by_daily_average():
+    try:
+        threshold = float(threshold_entry.get())
+    except ValueError:
+        messagebox.showerror("خطا", "لطفاً یک مقدار معتبر وارد کنید")
+        return
+    
+    search_results.delete(0, tk.END)
+    c.execute("SELECT id, name FROM names")
+    for name_id, name in c.fetchall():
+        avg_daily = calculate_average_activity(name_id)
+        if avg_daily < threshold:
+            search_results.insert(tk.END, f"{name}: {avg_daily:.2f} دقیقه")
 
 # ایجاد پنجره اصلی
 root = tk.Tk()
@@ -95,6 +151,15 @@ names_listbox.bind("<Double-1>", lambda x: open_activity_window())
 
 root.grid_columnconfigure(1, weight=1)
 root.grid_rowconfigure(1, weight=1)
+
+ttk.Label(root, text="میانگین ساعت روزانه کمتر از:").grid(row=2, column=0, padx=5, pady=5)
+threshold_entry = ttk.Entry(root)
+threshold_entry.grid(row=2, column=1, padx=5, pady=5)
+search_button = ttk.Button(root, text="جستجو", command=search_by_daily_average)
+search_button.grid(row=2, column=2, padx=5, pady=5)
+
+search_results = tk.Listbox(root)
+search_results.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
 
 load_names()
 
