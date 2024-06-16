@@ -49,6 +49,15 @@ def minutes_to_hours_minutes(minutes):
     minutes = minutes % 60
     return f"{int(hours):02}:{int(minutes):02}"
 
+# تابع برای شناسایی و تبدیل فرمت تاریخ
+def parse_date(date_string):
+    for fmt in ("%Y-%m-%d", "%m/%d/%y"):
+        try:
+            return datetime.strptime(date_string, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Date {date_string} is not in a recognized format")
+
 # تابع برای محاسبه میانگین فعالیت روزانه
 def calculate_average_activity(name_id):
     c.execute("SELECT start_time, end_time, date FROM activities WHERE name_id=?", (name_id,))
@@ -79,10 +88,8 @@ def calculate_weekly_activity(name_id):
         duration = (end_dt - start_dt).total_seconds() / 60
         if duration < 0:
             duration += 1440 # اگر خروج کمتر از ورود است، یعنی به روز بعد منتقل شده است
-        try:
-            week_start = datetime.strptime(date, "%m/%d/%y") - timedelta(days=datetime.strptime(date, "%m/%d/%y").weekday())
-        except ValueError:
-            week_start = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=datetime.strptime(date, "%Y-%m-%d").weekday())
+        date_parsed = parse_date(date)
+        week_start = date_parsed - timedelta(days=date_parsed.weekday())
         week_start_str = week_start.strftime("%Y-%m-%d")
         if week_start_str not in weekly_totals:
             weekly_totals[week_start_str] = 0
