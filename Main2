@@ -51,7 +51,7 @@ def minutes_to_hours_minutes(minutes):
 
 # تابع برای شناسایی و تبدیل فرمت تاریخ
 def parse_date(date_string):
-    for fmt in ("%Y-%m-%d", "%m/%d/%y"):
+    for fmt in ("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"):
         try:
             return datetime.strptime(date_string, fmt)
         except ValueError:
