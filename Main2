@@ -43,6 +43,12 @@ def load_names():
     for row in c.fetchall():
         names_listbox.insert(tk.END, row)
 
+# تابع برای تبدیل دقیقه به ساعت و دقیقه
+def minutes_to_hours_minutes(minutes):
+    hours = minutes // 60
+    minutes = minutes % 60
+    return f"{int(hours):02}:{int(minutes):02}"
+
 # تابع برای محاسبه میانگین فعالیت روزانه
 def calculate_average_activity(name_id):
     c.execute("SELECT start_time, end_time, date FROM activities WHERE name_id=?", (name_id,))
@@ -53,6 +59,8 @@ def calculate_average_activity(name_id):
         start_dt = datetime.strptime(start_time, "%H:%M")
         end_dt = datetime.strptime(end_time, "%H:%M")
         duration = (end_dt - start_dt).total_seconds() / 60
+        if duration < 0:
+            duration += 1440 # اگر خروج کمتر از ورود است، یعنی به روز بعد منتقل شده است
         total_minutes += duration
         if date not in daily_totals:
             daily_totals[date] = 0
@@ -69,6 +77,8 @@ def calculate_weekly_activity(name_id):
         start_dt = datetime.strptime(start_time, "%H:%M")
         end_dt = datetime.strptime(end_time, "%H:%M")
         duration = (end_dt - start_dt).total_seconds() / 60
+        if duration < 0:
+            duration += 1440 # اگر خروج کمتر از ورود است، یعنی به روز بعد منتقل شده است
         week_start = datetime.strptime(date, "%m/%d/%y") - timedelta(days=datetime.strptime(date, "%m/%d/%y").weekday())
         week_start_str = week_start.strftime("%Y-%m-%d")
         if week_start_str not in weekly_totals:
@@ -115,8 +125,8 @@ def open_activity_window():
         def show_averages():
             avg_daily = calculate_average_activity(name_id)
             avg_weekly = calculate_weekly_activity(name_id)
-            daily_avg_label.config(text=f"میانگین فعالیت روزانه: {avg_daily:.2f} دقیقه")
-            weekly_avg_label.config(text=f"میانگین فعالیت هفتگی: {avg_weekly:.2f} دقیقه")
+            daily_avg_label.config(text=f"میانگین فعالیت روزانه: {minutes_to_hours_minutes(avg_daily)}")
+            weekly_avg_label.config(text=f"میانگین فعالیت هفتگی: {minutes_to_hours_minutes(avg_weekly)}")
         
         daily_avg_label = ttk.Label(activity_window, text="")
         daily_avg_label.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
@@ -142,7 +152,7 @@ def search_by_daily_average():
     for name_id, name in c.fetchall():
         avg_daily = calculate_average_activity(name_id)
         if avg_daily < threshold:
-            search_results.insert(tk.END, f"{name}: {avg_daily:.2f} دقیقه")
+            search_results.insert(tk.END, f"{name}: {minutes_to_hours_minutes(avg_daily)}")
 
 # ایجاد پنجره اصلی
 root = tk.Tk()
@@ -164,12 +174,4 @@ root.grid_rowconfigure(1, weight=1)
 ttk.Label(root, text="میانگین ساعت روزانه کمتر از:").grid(row=2, column=0, padx=5, pady=5)
 threshold_entry = ttk.Entry(root)
 threshold_entry.grid(row=2, column=1, padx=5, pady=5)
-search_button = ttk.Button(root, text="جستجو", command=search_by_daily_average)
-search_button.grid(row=2, column=2, padx=5, pady=5)
-
-search_results = tk.Listbox(root)
-search_results.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
-
-load_names()
-
-root.mainloop()
+search_button =
