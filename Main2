@@ -111,12 +111,21 @@ def open_activity_window():
         save_button = ttk.Button(activity_window, text="ذخیره", command=save_activity)
         save_button.grid(row=3, column=0, columnspan=2, pady=10)
 
-        # نمایش میانگین فعالیت روزانه و هفتگی
-        avg_daily = calculate_average_activity(name_id)
-        avg_weekly = calculate_weekly_activity(name_id)
+        # دکمه‌ها و برچسب‌ها برای نمایش میانگین فعالیت روزانه و هفتگی
+        def show_averages():
+            avg_daily = calculate_average_activity(name_id)
+            avg_weekly = calculate_weekly_activity(name_id)
+            daily_avg_label.config(text=f"میانگین فعالیت روزانه: {avg_daily:.2f} دقیقه")
+            weekly_avg_label.config(text=f"میانگین فعالیت هفتگی: {avg_weekly:.2f} دقیقه")
+        
+        daily_avg_label = ttk.Label(activity_window, text="")
+        daily_avg_label.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
+        weekly_avg_label = ttk.Label(activity_window, text="")
+        weekly_avg_label.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
+        
+        show_avg_button = ttk.Button(activity_window, text="نمایش میانگین‌ها", command=show_averages)
+        show_avg_button.grid(row=6, column=0, columnspan=2, pady=10)
 
-        ttk.Label(activity_window, text=f"میانگین فعالیت روزانه: {avg_daily:.2f} دقیقه").grid(row=4, column=0, columnspan=2, padx=5, pady=5)
-        ttk.Label(activity_window, text=f"میانگین فعالیت هفتگی: {avg_weekly:.2f} دقیقه").grid(row=5, column=0, columnspan=2, padx=5, pady=5)
     else:
         messagebox.showwarning("خطا", "لطفاً یک نام انتخاب کنید")
 
