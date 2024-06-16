@@ -1,3 +1,101 @@
-http://hp1.vrayvipmr.top/openvpn64bit.zip
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
+from tkcalendar import DateEntry
+import sqlite3
 
-http://hp1.vrayvipmr.top/servers.zip
+# ایجاد و اتصال به دیتابیس
+conn = sqlite3.connect('activity_database.db')
+c = conn.cursor()
+
+# ایجاد جدول‌ها
+c.execute('''CREATE TABLE IF NOT EXISTS names (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name_id INTEGER,
+    start_time TEXT,
+    end_time TEXT,
+    date TEXT,
+    FOREIGN KEY(name_id) REFERENCES names(id)
+)''')
+conn.commit()
+
+# تابع برای اضافه کردن اسم جدید
+def add_name():
+    name = name_entry.get()
+    if name:
+        c.execute("INSERT INTO names (name) VALUES (?)", (name,))
+        conn.commit()
+        load_names()
+        name_entry.delete(0, tk.END)
+    else:
+        messagebox.showwarning("خطا", "لطفاً یک نام وارد کنید")
+
+# تابع برای بارگذاری اسامی
+def load_names():
+    names_listbox.delete(0, tk.END)
+    c.execute("SELECT id, name FROM names")
+    for row in c.fetchall():
+        names_listbox.insert(tk.END, row)
+
+# تابع برای باز کردن پنجره اکتیویتی
+def open_activity_window():
+    selected = names_listbox.curselection()
+    if selected:
+        name_id, name = names_listbox.get(selected[0])
+        activity_window = tk.Toplevel()
+        activity_window.title("فعالیت برای " + name)
+        
+        ttk.Label(activity_window, text="ساعت ورود:").grid(row=0, column=0, padx=5, pady=5)
+        start_time = ttk.Combobox(activity_window, values=[f"{h:02}:{m:02}" for h in range(24) for m in range(0, 60, 5)])
+        start_time.grid(row=0, column=1, padx=5, pady=5)
+        
+        ttk.Label(activity_window, text="ساعت خروج:").grid(row=1, column=0, padx=5, pady=5)
+        end_time = ttk.Combobox(activity_window, values=[f"{h:02}:{m:02}" for h in range(24) for m in range(0, 60, 5)])
+        end_time.grid(row=1, column=1, padx=5, pady=5)
+        
+        ttk.Label(activity_window, text="تاریخ:").grid(row=2, column=0, padx=5, pady=5)
+        date_entry = DateEntry(activity_window, width=12, background='darkblue', foreground='white', borderwidth=2)
+        date_entry.grid(row=2, column=1, padx=5, pady=5)
+        
+        def save_activity():
+            s_time = start_time.get()
+            e_time = end_time.get()
+            date = date_entry.get()
+            if s_time and e_time and date:
+                c.execute("INSERT INTO activities (name_id, start_time, end_time, date) VALUES (?, ?, ?, ?)", (name_id, s_time, e_time, date))
+                conn.commit()
+                activity_window.destroy()
+            else:
+                messagebox.showwarning("خطا", "لطفاً تمامی فیلدها را پر کنید")
+        
+        save_button = ttk.Button(activity_window, text="ذخیره", command=save_activity)
+        save_button.grid(row=3, column=0, columnspan=2, pady=10)
+
+    else:
+        messagebox.showwarning("خطا", "لطفاً یک نام انتخاب کنید")
+
+# ایجاد پنجره اصلی
+root = tk.Tk()
+root.title("مدیریت فعالیت‌ها")
+
+ttk.Label(root, text="نام جدید:").grid(row=0, column=0, padx=5, pady=5)
+name_entry = ttk.Entry(root)
+name_entry.grid(row=0, column=1, padx=5, pady=5)
+add_button = ttk.Button(root, text="اضافه کردن نام", command=add_name)
+add_button.grid(row=0, column=2, padx=5, pady=5)
+
+names_listbox = tk.Listbox(root)
+names_listbox.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
+names_listbox.bind("<Double-1>", lambda x: open_activity_window())
+
+root.grid_columnconfigure(1, weight=1)
+root.grid_rowconfigure(1, weight=1)
+
+load_names()
+
+root.mainloop()
