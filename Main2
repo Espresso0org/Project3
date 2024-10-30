@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 import sqlite3
 import jdatetime
 import pandas as pd
+import os
 
 # اتصال به دیتابیس SQLite
 conn = sqlite3.connect("inventory.db")
@@ -20,6 +21,7 @@ c.execute('''CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 product_id INTEGER,
                 change INTEGER,
+                description TEXT,
                 date TEXT,
                 FOREIGN KEY (product_id) REFERENCES products (id)
              )''')
@@ -51,30 +53,95 @@ def load_products():
         tree.insert("", "end", values=row)
 
 # تابع ورود و خروج کالا
-def update_quantity(change):
+def update_quantity(change_type):
     selected = tree.focus()
     if not selected:
         messagebox.showwarning("خطا در انتخاب", "لطفا یک کالا را انتخاب کنید.")
         return
+    try:
+        change_amount = int(entry_change.get())
+    except ValueError:
+        messagebox.showwarning("خطا در تعداد", "لطفا یک مقدار معتبر وارد کنید.")
+        return
+
+    description = entry_transaction_description.get()
     item = tree.item(selected)["values"]
     product_id = item[0]
+    current_quantity = item[3]
+
+    # محاسبه موجودی جدید
+    if change_type == "add":
+        new_quantity = current_quantity + change_amount
+    else:  # برای کاهش موجودی
+        new_quantity = current_quantity - change_amount
+        if new_quantity < 0:
+            messagebox.showwarning("خطا در موجودی", "موجودی کافی نیست.")
+            return
+
+    # بروزرسانی موجودی و ثبت تراکنش
     date = jdatetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    new_quantity = item[3] + change
-    if new_quantity < 0:
-        messagebox.showwarning("خطا در موجودی", "موجودی کافی نیست.")
-        return
     c.execute("UPDATE products SET quantity = ? WHERE id = ?", (new_quantity, product_id))
-    c.execute("INSERT INTO transactions (product_id, change, date) VALUES (?, ?, ?)", (product_id, change, date))
+    c.execute("INSERT INTO transactions (product_id, change, description, date) VALUES (?, ?, ?, ?)", 
+              (product_id, change_amount if change_type == "add" else -change_amount, description, date))
     conn.commit()
     load_products()
 
-# تابع خروجی به اکسل
-def export_to_excel():
-    c.execute("SELECT products.name, products.description, transactions.change, transactions.date FROM transactions INNER JOIN products ON transactions.product_id = products.id")
-    data = c.fetchall()
-    df = pd.DataFrame(data, columns=["نام کالا", "توضیحات", "تغییرات", "تاریخ"])
-    df.to_excel("inventory.xlsx", index=False)
-    messagebox.showinfo("خروجی", "داده‌ها با موفقیت به فایل inventory.xlsx خروجی شدند.")
+# تابع خروجی به اکسل برای هر کالا
+def export_individual_products():
+    os.makedirs("excels", exist_ok=True)
+    c.execute("SELECT * FROM products")
+    products = c.fetchall()
+
+    for product in products:
+        product_id, name, description, _ = product
+        c.execute("SELECT change, description, date FROM transactions WHERE product_id = ?", (product_id,))
+        transactions = c.fetchall()
+        df = pd.DataFrame(transactions, columns=["تغییرات", "توضیحات", "تاریخ"])
+        file_name = f"excels/{name}_transactions.xlsx"
+        df.to_excel(file_name, index=False)
+    
+    messagebox.showinfo("خروجی", "خروجی برای هر کالا در پوشه 'excels' ذخیره شد.")
+
+# تابع خروجی اکسل کلی
+def export_summary():
+    c.execute("SELECT id, name, quantity FROM products")
+    products = c.fetchall()
+    summary_data = []
+
+    for product in products:
+        product_id, name, initial_quantity = product
+
+        # محاسبه مقادیر کل ورودی و خروجی
+        c.execute("SELECT SUM(change) FROM transactions WHERE product_id = ? AND change > 0", (product_id,))
+        total_in = c.fetchone()[0] or 0
+
+        c.execute("SELECT SUM(change) FROM transactions WHERE product_id = ? AND change < 0", (product_id,))
+        total_out = abs(c.fetchone()[0] or 0)
+
+        final_quantity = initial_quantity + total_in - total_out
+        summary_data.append([name, initial_quantity, total_in, total_out, final_quantity])
+
+    summary_df = pd.DataFrame(summary_data, columns=["نام کالا", "مقدار اولیه", "کل ورودی", "کل خروجی", "موجودی نهایی"])
+    summary_df.to_excel("inventory_summary.xlsx", index=False)
+    messagebox.showinfo("خروجی", "خروجی کلی در فایل 'inventory_summary.xlsx' ذخیره شد.")
+
+# تابع خروجی اکسل برای تراکنش‌های یک کالا
+def export_selected_product():
+    selected = tree.focus()
+    if not selected:
+        messagebox.showwarning("خطا در انتخاب", "لطفا یک کالا را انتخاب کنید.")
+        return
+
+    item = tree.item(selected)["values"]
+    product_id, name, _, _ = item
+
+    c.execute("SELECT change, description, date FROM transactions WHERE product_id = ?", (product_id,))
+    transactions = c.fetchall()
+    df = pd.DataFrame(transactions, columns=["تغییرات", "توضیحات", "تاریخ"])
+    file_name = f"{name}_transactions.xlsx"
+    df.to_excel(file_name, index=False)
+
+    messagebox.showinfo("خروجی", f"خروجی تراکنش‌های کالا '{name}' در فایل '{file_name}' ذخیره شد.")
 
 # رابط کاربری
 root = tk.Tk()
@@ -103,16 +170,31 @@ for col in columns:
     tree.heading(col, text=col)
 tree.grid(row=4, column=0, columnspan=3)
 
+# فیلد مقدار و توضیحات ورود/خروج کالا
+tk.Label(root, text="تعداد:").grid(row=5, column=0)
+entry_change = tk.Entry(root)
+entry_change.grid(row=5, column=1)
+
+tk.Label(root, text="توضیحات تراکنش:").grid(row=6, column=0)
+entry_transaction_description = tk.Entry(root)
+entry_transaction_description.grid(row=6, column=1)
+
 # دکمه‌های ورود و خروج کالا
-btn_in = tk.Button(root, text="افزایش موجودی", command=lambda: update_quantity(1))
-btn_in.grid(row=5, column=0)
+btn_in = tk.Button(root, text="افزایش موجودی", command=lambda: update_quantity("add"))
+btn_in.grid(row=7, column=0)
 
-btn_out = tk.Button(root, text="کاهش موجودی", command=lambda: update_quantity(-1))
-btn_out.grid(row=5, column=1)
+btn_out = tk.Button(root, text="کاهش موجودی", command=lambda: update_quantity("remove"))
+btn_out.grid(row=7, column=1)
 
-# دکمه خروجی اکسل
-btn_export = tk.Button(root, text="خروجی به اکسل", command=export_to_excel)
-btn_export.grid(row=5, column=2)
+# دکمه‌های خروجی اکسل
+btn_export_selected = tk.Button(root, text="خروجی اکسل این کالا", command=export_selected_product)
+btn_export_selected.grid(row=8, column=0)
+
+btn_export_all = tk.Button(root, text="خروجی اکسل تمام کالاها", command=export_individual_products)
+btn_export_all.grid(row=8, column=1)
+
+btn_export_summary = tk.Button(root, text="خروجی اکسل کلی", command=export_summary)
+btn_export_summary.grid(row=8, column=2)
 
 load_products()
 
