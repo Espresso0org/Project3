@@ -1,195 +1,119 @@
 import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
-from tkcalendar import DateEntry
+from tkinter import ttk, messagebox
 import sqlite3
-from datetime import datetime, timedelta
+import jdatetime
+import pandas as pd
 
-# ایجاد و اتصال به دیتابیس
-conn = sqlite3.connect('activity_database.db')
+# اتصال به دیتابیس SQLite
+conn = sqlite3.connect("inventory.db")
 c = conn.cursor()
 
-# ایجاد جدول‌ها
-c.execute('''CREATE TABLE IF NOT EXISTS names (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
-)''')
+# ساخت جداول
+c.execute('''CREATE TABLE IF NOT EXISTS products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                quantity INTEGER DEFAULT 0
+             )''')
 
-c.execute('''CREATE TABLE IF NOT EXISTS activities (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name_id INTEGER,
-    start_time TEXT,
-    end_time TEXT,
-    date TEXT,
-    FOREIGN KEY(name_id) REFERENCES names(id)
-)''')
+c.execute('''CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER,
+                change INTEGER,
+                date TEXT,
+                FOREIGN KEY (product_id) REFERENCES products (id)
+             )''')
+
 conn.commit()
 
-# تابع برای اضافه کردن اسم جدید
-def add_name():
-    name = name_entry.get()
-    if name:
-        c.execute("INSERT INTO names (name) VALUES (?)", (name,))
+# تابع ثبت کالای جدید
+def add_product():
+    name = entry_name.get()
+    description = entry_description.get()
+    quantity = int(entry_quantity.get())
+    if name and quantity >= 0:
+        c.execute("INSERT INTO products (name, description, quantity) VALUES (?, ?, ?)", (name, description, quantity))
         conn.commit()
-        load_names()
-        name_entry.delete(0, tk.END)
+        messagebox.showinfo("موفقیت", "کالا با موفقیت اضافه شد.")
+        entry_name.delete(0, tk.END)
+        entry_description.delete(0, tk.END)
+        entry_quantity.delete(0, tk.END)
+        load_products()
     else:
-        messagebox.showwarning("خطا", "لطفاً یک نام وارد کنید")
+        messagebox.showwarning("خطا در ورود اطلاعات", "لطفا تمام فیلدها را به درستی پر کنید.")
 
-# تابع برای بارگذاری اسامی
-def load_names():
-    names_listbox.delete(0, tk.END)
-    c.execute("SELECT id, name FROM names")
+# تابع مشاهده لیست کالاها
+def load_products():
+    for item in tree.get_children():
+        tree.delete(item)
+    c.execute("SELECT * FROM products")
     for row in c.fetchall():
-        names_listbox.insert(tk.END, row)
+        tree.insert("", "end", values=row)
 
-# تابع برای تبدیل دقیقه به ساعت و دقیقه
-def minutes_to_hours_minutes(minutes):
-    hours = minutes // 60
-    minutes = minutes % 60
-    return f"{int(hours):02}:{int(minutes):02}"
-
-# تابع برای شناسایی و تبدیل فرمت تاریخ
-def parse_date(date_string):
-    for fmt in ("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(date_string, fmt)
-        except ValueError:
-            continue
-    raise ValueError(f"Date {date_string} is not in a recognized format")
-
-# تابع برای محاسبه میانگین فعالیت روزانه
-def calculate_average_activity(name_id):
-    c.execute("SELECT start_time, end_time, date FROM activities WHERE name_id=?", (name_id,))
-    activities = c.fetchall()
-    total_minutes = 0
-    daily_totals = {}
-    for start_time, end_time, date in activities:
-        start_dt = datetime.strptime(start_time, "%H:%M")
-        end_dt = datetime.strptime(end_time, "%H:%M")
-        duration = (end_dt - start_dt).total_seconds() / 60
-        if duration < 0:
-            duration += 1440 # اگر خروج کمتر از ورود است، یعنی به روز بعد منتقل شده است
-        total_minutes += duration
-        if date not in daily_totals:
-            daily_totals[date] = 0
-        daily_totals[date] += duration
-    average_daily = total_minutes / len(daily_totals) if daily_totals else 0
-    return average_daily
-
-# تابع برای محاسبه میانگین فعالیت هفتگی
-def calculate_weekly_activity(name_id):
-    c.execute("SELECT start_time, end_time, date FROM activities WHERE name_id=?", (name_id,))
-    activities = c.fetchall()
-    weekly_totals = {}
-    for start_time, end_time, date in activities:
-        start_dt = datetime.strptime(start_time, "%H:%M")
-        end_dt = datetime.strptime(end_time, "%H:%M")
-        duration = (end_dt - start_dt).total_seconds() / 60
-        if duration < 0:
-            duration += 1440 # اگر خروج کمتر از ورود است، یعنی به روز بعد منتقل شده است
-        date_parsed = parse_date(date)
-        week_start = date_parsed - timedelta(days=date_parsed.weekday())
-        week_start_str = week_start.strftime("%Y-%m-%d")
-        if week_start_str not in weekly_totals:
-            weekly_totals[week_start_str] = 0
-        weekly_totals[week_start_str] += duration
-    average_weekly = sum(weekly_totals.values()) / len(weekly_totals) if weekly_totals else 0
-    return average_weekly
-
-# تابع برای باز کردن پنجره اکتیویتی
-def open_activity_window():
-    selected = names_listbox.curselection()
-    if selected:
-        name_id, name = names_listbox.get(selected[0])
-        activity_window = tk.Toplevel()
-        activity_window.title("فعالیت برای " + name)
-        
-        ttk.Label(activity_window, text="ساعت ورود:").grid(row=0, column=0, padx=5, pady=5)
-        start_time = ttk.Combobox(activity_window, values=[f"{h:02}:{m:02}" for h in range(24) for m in range(0, 60, 5)])
-        start_time.grid(row=0, column=1, padx=5, pady=5)
-        
-        ttk.Label(activity_window, text="ساعت خروج:").grid(row=1, column=0, padx=5, pady=5)
-        end_time = ttk.Combobox(activity_window, values=[f"{h:02}:{m:02}" for h in range(24) for m in range(0, 60, 5)])
-        end_time.grid(row=1, column=1, padx=5, pady=5)
-        
-        ttk.Label(activity_window, text="تاریخ:").grid(row=2, column=0, padx=5, pady=5)
-        date_entry = DateEntry(activity_window, width=12, background='darkblue', foreground='white', borderwidth=2, date_pattern='mm/dd/y')
-        date_entry.grid(row=2, column=1, padx=5, pady=5)
-        
-        def save_activity():
-            s_time = start_time.get()
-            e_time = end_time.get()
-            date = date_entry.get()
-            if s_time and e_time and date:
-                c.execute("INSERT INTO activities (name_id, start_time, end_time, date) VALUES (?, ?, ?, ?)", (name_id, s_time, e_time, date))
-                conn.commit()
-                activity_window.destroy()
-            else:
-                messagebox.showwarning("خطا", "لطفاً تمامی فیلدها را پر کنید")
-        
-        save_button = ttk.Button(activity_window, text="ذخیره", command=save_activity)
-        save_button.grid(row=3, column=0, columnspan=2, pady=10)
-
-        # دکمه‌ها و برچسب‌ها برای نمایش میانگین فعالیت روزانه و هفتگی
-        def show_averages():
-            avg_daily = calculate_average_activity(name_id)
-            avg_weekly = calculate_weekly_activity(name_id)
-            daily_avg_label.config(text=f"میانگین فعالیت روزانه: {minutes_to_hours_minutes(avg_daily)}")
-            weekly_avg_label.config(text=f"میانگین فعالیت هفتگی: {minutes_to_hours_minutes(avg_weekly)}")
-        
-        daily_avg_label = ttk.Label(activity_window, text="")
-        daily_avg_label.grid(row=4, column=0, columnspan=2, padx=5, pady=5)
-        weekly_avg_label = ttk.Label(activity_window, text="")
-        weekly_avg_label.grid(row=5, column=0, columnspan=2, padx=5, pady=5)
-        
-        show_avg_button = ttk.Button(activity_window, text="نمایش میانگین‌ها", command=show_averages)
-        show_avg_button.grid(row=6, column=0, columnspan=2, pady=10)
-
-    else:
-        messagebox.showwarning("خطا", "لطفاً یک نام انتخاب کنید")
-
-# تابع برای جستجوی اسامی با میانگین فعالیت روزانه کمتر از مقدار مشخص شده
-def search_by_daily_average():
-    try:
-        threshold = float(threshold_entry.get())
-    except ValueError:
-        messagebox.showerror("خطا", "لطفاً یک مقدار معتبر وارد کنید")
+# تابع ورود و خروج کالا
+def update_quantity(change):
+    selected = tree.focus()
+    if not selected:
+        messagebox.showwarning("خطا در انتخاب", "لطفا یک کالا را انتخاب کنید.")
         return
-    
-    search_results.delete(0, tk.END)
-    c.execute("SELECT id, name FROM names")
-    for name_id, name in c.fetchall():
-        avg_daily = calculate_average_activity(name_id)
-        if avg_daily < threshold:
-            search_results.insert(tk.END, f"{name}: {minutes_to_hours_minutes(avg_daily)}")
+    item = tree.item(selected)["values"]
+    product_id = item[0]
+    date = jdatetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_quantity = item[3] + change
+    if new_quantity < 0:
+        messagebox.showwarning("خطا در موجودی", "موجودی کافی نیست.")
+        return
+    c.execute("UPDATE products SET quantity = ? WHERE id = ?", (new_quantity, product_id))
+    c.execute("INSERT INTO transactions (product_id, change, date) VALUES (?, ?, ?)", (product_id, change, date))
+    conn.commit()
+    load_products()
 
-# ایجاد پنجره اصلی
+# تابع خروجی به اکسل
+def export_to_excel():
+    c.execute("SELECT products.name, products.description, transactions.change, transactions.date FROM transactions INNER JOIN products ON transactions.product_id = products.id")
+    data = c.fetchall()
+    df = pd.DataFrame(data, columns=["نام کالا", "توضیحات", "تغییرات", "تاریخ"])
+    df.to_excel("inventory.xlsx", index=False)
+    messagebox.showinfo("خروجی", "داده‌ها با موفقیت به فایل inventory.xlsx خروجی شدند.")
+
+# رابط کاربری
 root = tk.Tk()
-root.title("مدیریت فعالیت‌ها")
+root.title("سیستم مدیریت انبار")
 
-ttk.Label(root, text="نام جدید:").grid(row=0, column=0, padx=5, pady=5)
-name_entry = ttk.Entry(root)
-name_entry.grid(row=0, column=1, padx=5, pady=5)
-add_button = ttk.Button(root, text="اضافه کردن نام", command=add_name)
-add_button.grid(row=0, column=2, padx=5, pady=5)
+# فیلدهای ورودی کالا
+tk.Label(root, text="نام کالا:").grid(row=0, column=0)
+entry_name = tk.Entry(root)
+entry_name.grid(row=0, column=1)
 
-names_listbox = tk.Listbox(root)
-names_listbox.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
-names_listbox.bind("<Double-1>", lambda x: open_activity_window())
+tk.Label(root, text="توضیحات:").grid(row=1, column=0)
+entry_description = tk.Entry(root)
+entry_description.grid(row=1, column=1)
 
-root.grid_columnconfigure(1, weight=1)
-root.grid_rowconfigure(1, weight=1)
+tk.Label(root, text="تعداد اولیه:").grid(row=2, column=0)
+entry_quantity = tk.Entry(root)
+entry_quantity.grid(row=2, column=1)
 
-ttk.Label(root, text="میانگین ساعت روزانه کمتر از:").grid(row=2, column=0, padx=5, pady=5)
-threshold_entry = ttk.Entry(root)
-threshold_entry.grid(row=2, column=1, padx=5, pady=5)
-search_button = ttk.Button(root, text="جستجو", command=search_by_daily_average)
-search_button.grid(row=2, column=2, padx=5, pady=5)
+btn_add = tk.Button(root, text="افزودن کالا", command=add_product)
+btn_add.grid(row=3, column=1)
 
-search_results = tk.Listbox(root)
-search_results.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky='nsew')
+# جدول لیست کالاها
+columns = ("شناسه", "نام", "توضیحات", "موجودی")
+tree = ttk.Treeview(root, columns=columns, show="headings")
+for col in columns:
+    tree.heading(col, text=col)
+tree.grid(row=4, column=0, columnspan=3)
 
-load_names()
+# دکمه‌های ورود و خروج کالا
+btn_in = tk.Button(root, text="افزایش موجودی", command=lambda: update_quantity(1))
+btn_in.grid(row=5, column=0)
+
+btn_out = tk.Button(root, text="کاهش موجودی", command=lambda: update_quantity(-1))
+btn_out.grid(row=5, column=1)
+
+# دکمه خروجی اکسل
+btn_export = tk.Button(root, text="خروجی به اکسل", command=export_to_excel)
+btn_export.grid(row=5, column=2)
+
+load_products()
 
 root.mainloop()
