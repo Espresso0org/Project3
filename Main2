@@ -4,6 +4,13 @@ import sqlite3
 import jdatetime
 import pandas as pd
 import os
+from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Font
+
+# تابع تبدیل اعداد به فارسی
+def to_persian_numbers(number):
+    persian_digits = "۰۱۲۳۴۵۶۷۸۹"
+    return ''.join(persian_digits[int(digit)] if digit.isdigit() else digit for digit in str(number))
 
 # اتصال به دیتابیس SQLite
 conn = sqlite3.connect("inventory.db")
@@ -13,7 +20,7 @@ c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
-                description TEXT,
+                appearance TEXT,
                 quantity INTEGER DEFAULT 0
              )''')
 
@@ -31,14 +38,14 @@ conn.commit()
 # تابع ثبت کالای جدید
 def add_product():
     name = entry_name.get()
-    description = entry_description.get()
+    appearance = entry_appearance.get()
     quantity = int(entry_quantity.get())
     if name and quantity >= 0:
-        c.execute("INSERT INTO products (name, description, quantity) VALUES (?, ?, ?)", (name, description, quantity))
+        c.execute("INSERT INTO products (name, appearance, quantity) VALUES (?, ?, ?)", (name, appearance, quantity))
         conn.commit()
         messagebox.showinfo("موفقیت", "کالا با موفقیت اضافه شد.")
         entry_name.delete(0, tk.END)
-        entry_description.delete(0, tk.END)
+        entry_appearance.delete(0, tk.END)
         entry_quantity.delete(0, tk.END)
         load_products()
     else:
@@ -51,79 +58,6 @@ def load_products():
     c.execute("SELECT * FROM products")
     for row in c.fetchall():
         tree.insert("", "end", values=row)
-
-# تابع ورود و خروج کالا
-def update_quantity(change_type):
-    selected = tree.focus()
-    if not selected:
-        messagebox.showwarning("خطا در انتخاب", "لطفا یک کالا را انتخاب کنید.")
-        return
-    try:
-        change_amount = int(entry_change.get())
-    except ValueError:
-        messagebox.showwarning("خطا در تعداد", "لطفا یک مقدار معتبر وارد کنید.")
-        return
-
-    description = entry_transaction_description.get()
-    item = tree.item(selected)["values"]
-    product_id = item[0]
-    current_quantity = item[3]
-
-    # محاسبه موجودی جدید
-    if change_type == "add":
-        new_quantity = current_quantity + change_amount
-    else:  # برای کاهش موجودی
-        new_quantity = current_quantity - change_amount
-        if new_quantity < 0:
-            messagebox.showwarning("خطا در موجودی", "موجودی کافی نیست.")
-            return
-
-    # بروزرسانی موجودی و ثبت تراکنش
-    date = jdatetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    c.execute("UPDATE products SET quantity = ? WHERE id = ?", (new_quantity, product_id))
-    c.execute("INSERT INTO transactions (product_id, change, description, date) VALUES (?, ?, ?, ?)", 
-              (product_id, change_amount if change_type == "add" else -change_amount, description, date))
-    conn.commit()
-    load_products()
-
-# تابع خروجی به اکسل برای هر کالا
-def export_individual_products():
-    os.makedirs("excels", exist_ok=True)
-    c.execute("SELECT * FROM products")
-    products = c.fetchall()
-
-    for product in products:
-        product_id, name, description, _ = product
-        c.execute("SELECT change, description, date FROM transactions WHERE product_id = ?", (product_id,))
-        transactions = c.fetchall()
-        df = pd.DataFrame(transactions, columns=["تغییرات", "توضیحات", "تاریخ"])
-        file_name = f"excels/{name}_transactions.xlsx"
-        df.to_excel(file_name, index=False)
-    
-    messagebox.showinfo("خروجی", "خروجی برای هر کالا در پوشه 'excels' ذخیره شد.")
-
-# تابع خروجی اکسل کلی
-def export_summary():
-    c.execute("SELECT id, name, quantity FROM products")
-    products = c.fetchall()
-    summary_data = []
-
-    for product in products:
-        product_id, name, initial_quantity = product
-
-        # محاسبه مقادیر کل ورودی و خروجی
-        c.execute("SELECT SUM(change) FROM transactions WHERE product_id = ? AND change > 0", (product_id,))
-        total_in = c.fetchone()[0] or 0
-
-        c.execute("SELECT SUM(change) FROM transactions WHERE product_id = ? AND change < 0", (product_id,))
-        total_out = abs(c.fetchone()[0] or 0)
-
-        final_quantity = initial_quantity + total_in - total_out
-        summary_data.append([name, initial_quantity, total_in, total_out, final_quantity])
-
-    summary_df = pd.DataFrame(summary_data, columns=["نام کالا", "مقدار اولیه", "کل ورودی", "کل خروجی", "موجودی نهایی"])
-    summary_df.to_excel("inventory_summary.xlsx", index=False)
-    messagebox.showinfo("خروجی", "خروجی کلی در فایل 'inventory_summary.xlsx' ذخیره شد.")
 
 # تابع خروجی اکسل برای تراکنش‌های یک کالا
 def export_selected_product():
@@ -138,10 +72,93 @@ def export_selected_product():
     c.execute("SELECT change, description, date FROM transactions WHERE product_id = ?", (product_id,))
     transactions = c.fetchall()
     df = pd.DataFrame(transactions, columns=["تغییرات", "توضیحات", "تاریخ"])
+
+    # تبدیل اعداد به فارسی
+    df["تغییرات"] = df["تغییرات"].apply(to_persian_numbers)
+    
     file_name = f"{name}_transactions.xlsx"
     df.to_excel(file_name, index=False)
 
+    # فرمت‌بندی فایل اکسل با openpyxl
+    wb = load_workbook(file_name)
+    ws = wb.active
+    font = Font(name="B Nazanin")
+
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(horizontal="right")
+            cell.font = font
+
+    wb.save(file_name)
     messagebox.showinfo("خروجی", f"خروجی تراکنش‌های کالا '{name}' در فایل '{file_name}' ذخیره شد.")
+
+# تابع خروجی اکسل برای تمام کالاها
+def export_individual_products():
+    os.makedirs("excels", exist_ok=True)
+    c.execute("SELECT * FROM products")
+    products = c.fetchall()
+
+    for product in products:
+        product_id, name, appearance, _ = product
+        c.execute("SELECT change, description, date FROM transactions WHERE product_id = ?", (product_id,))
+        transactions = c.fetchall()
+        df = pd.DataFrame(transactions, columns=["تغییرات", "توضیحات", "تاریخ"])
+
+        # تبدیل اعداد به فارسی
+        df["تغییرات"] = df["تغییرات"].apply(to_persian_numbers)
+        
+        file_name = f"excels/{name}_transactions.xlsx"
+        df.to_excel(file_name, index=False)
+
+        # فرمت‌بندی فایل اکسل با openpyxl
+        wb = load_workbook(file_name)
+        ws = wb.active
+        font = Font(name="B Nazanin")
+
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(horizontal="right")
+                cell.font = font
+        
+        wb.save(file_name)
+
+    messagebox.showinfo("خروجی", "خروجی برای هر کالا در پوشه 'excels' ذخیره شد.")
+
+# تابع خروجی اکسل کلی
+def export_summary():
+    c.execute("SELECT id, name, appearance, quantity FROM products")
+    products = c.fetchall()
+    summary_data = []
+
+    for product in products:
+        product_id, name, appearance, initial_quantity = product
+
+        # محاسبه مقادیر کل ورودی و خروجی
+        c.execute("SELECT SUM(change) FROM transactions WHERE product_id = ? AND change > 0", (product_id,))
+        total_in = c.fetchone()[0] or 0
+
+        c.execute("SELECT SUM(change) FROM transactions WHERE product_id = ? AND change < 0", (product_id,))
+        total_out = abs(c.fetchone()[0] or 0)
+
+        summary_data.append([to_persian_numbers(product_id), name, to_persian_numbers(initial_quantity),
+                             to_persian_numbers(total_in), to_persian_numbers(total_out)])
+
+    summary_df = pd.DataFrame(summary_data, columns=["شناسه", "نام کالا", "تعداد اولیه", "تعداد ورودی", "تعداد خروجی"])
+    summary_df.to_excel("inventory_summary.xlsx", index=False)
+    
+    # فرمت‌بندی فایل اکسل با openpyxl
+    wb = load_workbook("inventory_summary.xlsx")
+    ws = wb.active
+
+    # تنظیم راست‌چین کردن و فونت
+    font = Font(name="B Nazanin")
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(horizontal="right")
+            cell.font = font
+    
+    wb.save("inventory_summary.xlsx")
+    messagebox.showinfo("خروجی", "خروجی کلی در فایل 'inventory_summary.xlsx' ذخیره شد.")
 
 # رابط کاربری
 root = tk.Tk()
@@ -152,9 +169,9 @@ tk.Label(root, text="نام کالا:").grid(row=0, column=0)
 entry_name = tk.Entry(root)
 entry_name.grid(row=0, column=1)
 
-tk.Label(root, text="توضیحات:").grid(row=1, column=0)
-entry_description = tk.Entry(root)
-entry_description.grid(row=1, column=1)
+tk.Label(root, text="مشخصات ظاهری:").grid(row=1, column=0)
+entry_appearance = tk.Entry(root)
+entry_appearance.grid(row=1, column=1)
 
 tk.Label(root, text="تعداد اولیه:").grid(row=2, column=0)
 entry_quantity = tk.Entry(root)
@@ -164,37 +181,21 @@ btn_add = tk.Button(root, text="افزودن کالا", command=add_product)
 btn_add.grid(row=3, column=1)
 
 # جدول لیست کالاها
-columns = ("شناسه", "نام", "توضیحات", "موجودی")
+columns = ("شناسه", "نام", "مشخصات ظاهری", "موجودی")
 tree = ttk.Treeview(root, columns=columns, show="headings")
 for col in columns:
     tree.heading(col, text=col)
 tree.grid(row=4, column=0, columnspan=3)
 
-# فیلد مقدار و توضیحات ورود/خروج کالا
-tk.Label(root, text="تعداد:").grid(row=5, column=0)
-entry_change = tk.Entry(root)
-entry_change.grid(row=5, column=1)
+# دکمه‌های خروجی اکسل برای تراکنش‌های یک کالا و تمام کالاها
+btn_export_selected = tk.Button(root, text="خروجی اکسل تراکنش‌های یک کالا", command=export_selected_product)
+btn_export_selected.grid(row=5, column=2)
 
-tk.Label(root, text="توضیحات تراکنش:").grid(row=6, column=0)
-entry_transaction_description = tk.Entry(root)
-entry_transaction_description.grid(row=6, column=1)
-
-# دکمه‌های ورود و خروج کالا
-btn_in = tk.Button(root, text="افزایش موجودی", command=lambda: update_quantity("add"))
-btn_in.grid(row=7, column=0)
-
-btn_out = tk.Button(root, text="کاهش موجودی", command=lambda: update_quantity("remove"))
-btn_out.grid(row=7, column=1)
-
-# دکمه‌های خروجی اکسل
-btn_export_selected = tk.Button(root, text="خروجی اکسل این کالا", command=export_selected_product)
-btn_export_selected.grid(row=8, column=0)
-
-btn_export_all = tk.Button(root, text="خروجی اکسل تمام کالاها", command=export_individual_products)
-btn_export_all.grid(row=8, column=1)
+btn_export_individual = tk.Button(root, text="خروجی اکسل برای تمام کالاها", command=export_individual_products)
+btn_export_individual.grid(row=6, column=2)
 
 btn_export_summary = tk.Button(root, text="خروجی اکسل کلی", command=export_summary)
-btn_export_summary.grid(row=8, column=2)
+btn_export_summary.grid(row=7, column=2)
 
 load_products()
 
