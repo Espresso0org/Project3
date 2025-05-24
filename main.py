@@ -1,72 +1,53 @@
-import os
-import pickle
-import time
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-import base64
-import email
+from ecdsa import ellipticcurve, SECP256k1
 
-# If modifying these scopes, delete the file token.pickle.
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+# Curve and generator
+curve = SECP256k1.curve
+G = SECP256k1.generator
+n = SECP256k1.order
 
-def authenticate():
-    creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
+# Given scalar
+d = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
+def get_public_key():
+    x_hex = input("Enter the X coordinate of the public key (hex): ").strip()
+    y_hex = input("Enter the Y coordinate of the public key (hex): ").strip()
+    try:
+        x = int(x_hex, 16)
+        y = int(y_hex, 16)
+        Q = ellipticcurve.Point(curve, x, y)
+        return Q
+    except Exception as e:
+        print("Invalid input or point:", e)
+        return None
 
-    service = build('gmail', 'v1', credentials=creds)
-    return service
+def main():
+    Q = get_public_key()
+    if Q is None:
+        return
 
-def mark_as_read(message_id):
-    service = authenticate()
-    service.users().messages().modify(userId='me', id=message_id, body={'removeLabelIds': ['UNREAD']}).execute()
+    # Compute Q*2 + 2G + d*G
+    expr1 = Q * 2 + G * 2 + G * d
+    print("First x-coordinate (hex):", hex(expr1.x()))
 
-def get_email_content(message_id):
-    service = authenticate()
-    message = service.users().messages().get(userId='me', id=message_id, format='full').execute()
-    
-    payload = message['payload']
-    headers = payload['headers']
-    
-    subject = next((header['value'] for header in headers if header['name'] == 'Subject'), None)
-    sender = next((header['value'] for header in headers if header['name'] == 'From'), None)
-    
-    print('From:', sender)
-    print('Subject:', subject)
-    
-    parts = payload.get('parts', [])
-    message_content = ''
-    
-    for part in parts:
-        if part['body'].get('data'):
-            part_data = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
-            message_content += part_data
-    
-    print('Message:', message_content)
+    # Compute d*G
+    dG = G * d  # This is a PointJacobi
+    dG_affine = dG.to_affine()  # Convert to affine Point
 
-def check_and_process_unread_emails():
-    service = authenticate()
-    results = service.users().messages().list(userId='me', labelIds=['INBOX', 'UNREAD']).execute()
-    messages = results.get('messages', [])
+    # Convert Q to PointJacobi temporarily to match types
+    Q_jacobi = dG_affine.__class__.from_affine(Q)
 
-    if messages:
-        for message in messages:
-            message_id = message['id']
-            get_email_content(message_id)
-            mark_as_read(message_id)
+    # Now compute (d*G - Q)
+    dG_minus_Q = dG - Q_jacobi  # both PointJacobi
 
-if __name__ == '__main__':
-    while True:
-        check_and_process_unread_emails()
-        time.sleep(5)
+    # Final expression: dG + (dG - Q) + Q
+    result = dG + dG_minus_Q + Q_jacobi
+    x2 = result.to_affine().x()
+    print("Second x-coordinate (hex):", hex(x2))
+
+    if expr1.x() == x2:
+        print("your d < n/2")
+    else:
+        print("Mismatch or incorrect point")
+
+if __name__ == "__main__":
+    main()
