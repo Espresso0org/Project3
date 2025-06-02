@@ -1,49 +1,101 @@
-from ecdsa import ellipticcurve, SECP256k1
+from sympy.ntheory.modular import crt
+import sys
 
-# Use secp256k1 curve
-curve = SECP256k1.curve
-G = SECP256k1.generator
-n = SECP256k1.order
+# secp256k1 constants
+P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
+A, B = 0, 7
+Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
+Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
+G = (Gx, Gy)
+N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
-# Your scalar
-d = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0
+# Generate a big list of distinct 32-bit safe primes manually selected
+small_moduli = [
+    4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967187,
+    4294967171, 4294967161, 4294967143, 4294967129, 4294967111, 4294967107,
+    4294967099, 4294967087, 4294967073, 4294967057, 4294967043, 4294967039,
+    4294967029, 4294967011, 4294967007, 4294966997, 4294966981, 4294966979,
+    4294966973, 4294966967, 4294966953, 4294966949, 4294966943, 4294966933,
+    4294966927, 4294966919, 4294966911, 4294966903, 4294966891, 4294966889,
+    4294966883, 4294966877, 4294966869, 4294966861, 4294966853, 4294966849,
+    4294966841, 4294966833, 4294966823, 4294966811, 4294966803, 4294966799
+]
 
-def get_public_key():
-    x_hex = input("Enter the X coordinate of the public key (hex): ").strip()
-    y_hex = input("Enter the Y coordinate of the public key (hex): ").strip()
-    try:
-        x = int(x_hex, 16)
-        y = int(y_hex, 16)
-        Q = ellipticcurve.Point(curve, x, y)
-        return Q
-    except Exception as e:
-        print("Invalid point:", e)
+# --- EC Math on small fields ---
+
+def point_add(p_mod, P, Q):
+    if P is None: return Q
+    if Q is None: return P
+    x1, y1 = P
+    x2, y2 = Q
+    if x1 == x2 and y1 != y2: return None
+    if x1 == x2:
+        l = (3 * x1 * x1) * pow(2 * y1, -1, p_mod)
+    else:
+        l = (y2 - y1) * pow(x2 - x1, -1, p_mod)
+    l %= p_mod
+    x3 = (l * l - x1 - x2) % p_mod
+    y3 = (l * (x1 - x3) - y1) % p_mod
+    return (x3, y3)
+
+def scalar_mult(p_mod, k, P):
+    result = None
+    addend = P
+    while k:
+        if k & 1:
+            result = point_add(p_mod, result, addend)
+        addend = point_add(p_mod, addend, addend)
+        k >>= 1
+    return result
+
+def fold_point(P, modulus):
+    x, y = P
+    return (x % modulus, y % modulus)
+
+def entropy_probe(mod, G_folded, Q_folded):
+    for k in range(1, mod):
+        if scalar_mult(mod, k, G_folded) == Q_folded:
+            return k
+    return None
+
+# --- Crack the key with tons of moduli ---
+def pfich_recover_d(Qx, Qy):
+    Q = (Qx, Qy)
+    residues = []
+    moduli_used = []
+    total_bits = 0
+
+    for mod in small_moduli:
+        G_folded = fold_point(G, mod)
+        Q_folded = fold_point(Q, mod)
+        d_mod = entropy_probe(mod, G_folded, Q_folded)
+        if d_mod is not None:
+            residues.append(d_mod)
+            moduli_used.append(mod)
+            total_bits += mod.bit_length()
+            print(f"[+] Solved mod {mod} (bit sum: {total_bits})")
+            if total_bits >= 260:
+                break
+
+    if len(residues) < 2:
         return None
 
-def main():
-    Q = get_public_key()
-    if Q is None:
-        return
+    d_recovered, _ = crt(moduli_used, residues)
+    return d_recovered % N
 
-    # All points are affine here, no PointJacobi!
-    Q2 = Q * 2
-    G2 = G * 2
-    dG = G * d
-
-    # First expression
-    expr1 = Q2 + G2 + dG
-    print("First x-coordinate (hex):", hex(expr1.x()))
-
-    # Second expression
-    dG_minus_Q = ellipticcurve.Point(curve, dG.x(), dG.y()) - Q  # force affine
-    expr2 = dG + dG_minus_Q + Q
-    print("Second x-coordinate (hex):", hex(expr2.x()))
-
-    # Compare results
-    if expr1.x() == expr2.x():
-        print("your d < n/2")
-    else:
-        print("Mismatch or incorrect point")
-
+# --- MAIN ---
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) != 3:
+        print("Usage: python3 crack_full_key.py <pubkey_x> <pubkey_y>")
+        sys.exit(1)
+
+    pubkey_x = int(sys.argv[1])
+    pubkey_y = int(sys.argv[2])
+
+    d = pfich_recover_d(pubkey_x, pubkey_y)
+
+    if d:
+        print("[+] ✅ FULL Private Key Recovered:")
+        print(hex(d))
+    else:
+        print("[-] ❌ Could not recover key. Check input or try more moduli.")
