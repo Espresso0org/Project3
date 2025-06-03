@@ -1,158 +1,139 @@
-import tkinter as tk
-from tkinter import messagebox, ttk
-from datetime import datetime
-import sqlite3
-import pandas as pd
+from sympy.ntheory.modular import crt
+import sys
+from multiprocessing import Pool, cpu_count
 
-# اتصال به دیتابیس و ایجاد جداول کالاها و تراکنش‌ها (در صورت عدم وجود)
-conn = sqlite3.connect("inventory.db")
-cursor = conn.cursor()
-cursor.execute('''CREATE TABLE IF NOT EXISTS items 
-                  (id INTEGER PRIMARY KEY, name TEXT, details TEXT, unit TEXT, quantity INTEGER)''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS transactions 
-                  (id INTEGER PRIMARY KEY, item_id INTEGER, type TEXT, amount INTEGER, 
-                  description TEXT, date TEXT, FOREIGN KEY(item_id) REFERENCES items(id))''')
-conn.commit()
+# secp256k1 constants
+P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
+A, B = 0, 7
+Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
+Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
+G = (Gx, Gy)
+N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
-# ساخت پنجره اصلی برنامه
-root = tk.Tk()
-root.title("برنامه انبارداری")
-root.geometry("400x300")
-root.configure(bg='#F0F0F0')
+small_moduli = [
+    4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967187,
+    4294967171, 4294967161, 4294967143, 4294967129, 4294967111, 4294967107,
+    4294967099, 4294967087, 4294967073, 4294967057, 4294967043, 4294967039,
+    4294967029, 4294967011, 4294967007, 4294966997, 4294966981, 4294966979,
+    4294966973, 4294966967, 4294966953, 4294966949, 4294966943, 4294966933,
+    4294966927, 4294966919, 4294966911, 4294966903, 4294966891, 4294966889,
+    4294966883, 4294966877, 4294966869, 4294966861, 4294966853, 4294966849,
+    4294966841, 4294966833, 4294966823, 4294966811, 4294966803, 4294966799
+]
 
-# تنظیم فونت فارسی و راست‌چین کردن
-font_style = ("B Nazanin", 12)
-button_options = {'padx': 20, 'pady': 10, 'anchor': 'e', 'font': font_style, 'bg': '#D5E4F2'}
+def point_add(p_mod, P, Q):
+    if P is None: return Q
+    if Q is None: return P
+    x1, y1 = P
+    x2, y2 = Q
+    if x1 == x2 and y1 != y2: return None
+    if x1 == x2:
+        l = (3 * x1 * x1) * pow(2 * y1, -1, p_mod)
+    else:
+        l = (y2 - y1) * pow(x2 - x1, -1, p_mod)
+    l %= p_mod
+    x3 = (l * l - x1 - x2) % p_mod
+    y3 = (l * (x1 - x3) - y1) % p_mod
+    return (x3, y3)
 
-# تابع نمایش لیست کالاها
-def show_items():
-    def load_items():
-        # گرفتن اطلاعات کالاها از دیتابیس
-        cursor.execute("SELECT * FROM items")
-        items = cursor.fetchall()
-        
-        for row in tree.get_children():
-            tree.delete(row)
-        
-        # گرفتن اطلاعات ورودی و خروجی هر کالا و محاسبه تعداد نهایی
-        for item in items:
-            item_id = item[0]
-            cursor.execute("SELECT SUM(amount) FROM transactions WHERE item_id = ? AND type = 'ورودی'", (item_id,))
-            total_input = cursor.fetchone()[0] or 0
-            cursor.execute("SELECT SUM(amount) FROM transactions WHERE item_id = ? AND type = 'خروجی'", (item_id,))
-            total_output = cursor.fetchone()[0] or 0
-            final_quantity = item[4] + total_input - total_output
-            
-            tree.insert("", "end", values=(item[0], item[1], item[2], item[3], item[4], total_input, total_output, final_quantity))
+def scalar_mult(p_mod, k, P):
+    result = None
+    addend = P
+    while k:
+        if k & 1:
+            result = point_add(p_mod, result, addend)
+        addend = point_add(p_mod, addend, addend)
+        k >>= 1
+    return result
 
-    # ایجاد پنجره جدید برای نمایش لیست کالاها
-    item_window = tk.Toplevel(root)
-    item_window.title("لیست کالاها")
-    item_window.geometry("800x400")
+def fold_point(P, modulus):
+    x, y = P
+    return (x % modulus, y % modulus)
 
-    # تنظیم جدول نمایش کالاها
-    columns = ("شناسه", "نام کالا", "مشخصات ظاهری", "واحد", "تعداد اولیه", "تعداد ورودی", "تعداد خروجی", "تعداد نهایی")
-    tree = ttk.Treeview(item_window, columns=columns, show="headings")
-    for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, anchor="center")
-    tree.pack(fill="both", expand=True)
-    
-    # بارگذاری داده‌ها
-    load_items()
+# Pollard's Rho for discrete log on small prime field
+def pollards_rho_discrete_log(p_mod, G_folded, Q_folded):
+    import random
 
-    # تابع برای ثبت ورودی جدید
-    def add_input():
-        def save_input():
-            amount = int(entry_amount.get())
-            description = entry_description.get()
-            date = entry_date.get()
+    def f(X, a, b):
+        x, a_, b_ = X
+        if x[0] % 3 == 0:
+            x = point_add(p_mod, x, G_folded)
+            a_ = (a_ + 1) % p_mod
+        elif x[0] % 3 == 1:
+            x = point_add(p_mod, x, Q_folded)
+            b_ = (b_ + 1) % p_mod
+        else:
+            x = point_add(p_mod, x, x)
+            a_ = (2 * a_) % p_mod
+            b_ = (2 * b_) % p_mod
+        return (x, a_, b_)
 
-            cursor.execute("INSERT INTO transactions (item_id, type, amount, description, date) VALUES (?, ?, ?, ?, ?)",
-                           (selected_item, 'ورودی', amount, description, date))
-            conn.commit()
-            transaction_window.destroy()
-            load_items()
-        
-        selected_item = tree.item(tree.focus())['values'][0]
-        transaction_window = tk.Toplevel(item_window)
-        transaction_window.title("ورودی جدید")
-        transaction_window.geometry("300x200")
+    x = G_folded
+    a = 1
+    b = 0
+    X = (x, a, b)
+    x_prime = X
 
-        tk.Label(transaction_window, text="تعداد ورودی:", font=font_style).pack(pady=5)
-        entry_amount = tk.Entry(transaction_window, font=font_style)
-        entry_amount.pack(pady=5)
+    for i in range(1, p_mod):
+        X = f(*X)
+        x_prime = f(*f(*x_prime))
 
-        tk.Label(transaction_window, text="توضیحات:", font=font_style).pack(pady=5)
-        entry_description = tk.Entry(transaction_window, font=font_style)
-        entry_description.pack(pady=5)
+        if X[0] == x_prime[0]:
+            r = (X[1] - x_prime[1]) % p_mod
+            s = (x_prime[2] - X[2]) % p_mod
+            if s == 0:
+                return None
+            inv_s = pow(s, -1, p_mod)
+            return (r * inv_s) % p_mod
+    return None
 
-        tk.Label(transaction_window, text="تاریخ:", font=font_style).pack(pady=5)
-        entry_date = tk.Entry(transaction_window, font=font_style)
-        entry_date.insert(0, datetime.now().strftime("%Y-%m-%d"))
-        entry_date.pack(pady=5)
+def entropy_probe_parallel(args):
+    mod, G_folded, Q_folded = args
+    d_mod = pollards_rho_discrete_log(mod, G_folded, Q_folded)
+    return (mod, d_mod)
 
-        tk.Button(transaction_window, text="ثبت ورودی", command=save_input, font=font_style).pack(pady=20)
+def pfich_recover_d(Qx, Qy):
+    Q = (Qx, Qy)
+    residues = []
+    moduli_used = []
+    total_bits = 0
 
-    # تابع برای ثبت خروجی جدید
-    def add_output():
-        def save_output():
-            amount = int(entry_amount.get())
-            description = entry_description.get()
-            date = entry_date.get()
+    with Pool(cpu_count()) as pool:
+        tasks = []
+        for mod in small_moduli:
+            G_folded = fold_point(G, mod)
+            Q_folded = fold_point(Q, mod)
+            tasks.append((mod, G_folded, Q_folded))
 
-            cursor.execute("INSERT INTO transactions (item_id, type, amount, description, date) VALUES (?, ?, ?, ?, ?)",
-                           (selected_item, 'خروجی', amount, description, date))
-            conn.commit()
-            transaction_window.destroy()
-            load_items()
-        
-        selected_item = tree.item(tree.focus())['values'][0]
-        transaction_window = tk.Toplevel(item_window)
-        transaction_window.title("خروجی جدید")
-        transaction_window.geometry("300x200")
+        results = pool.map(entropy_probe_parallel, tasks)
 
-        tk.Label(transaction_window, text="تعداد خروجی:", font=font_style).pack(pady=5)
-        entry_amount = tk.Entry(transaction_window, font=font_style)
-        entry_amount.pack(pady=5)
+    for mod, d_mod in results:
+        if d_mod is not None:
+            residues.append(d_mod)
+            moduli_used.append(mod)
+            total_bits += mod.bit_length()
+            print(f"[+] Solved mod {mod} (bit sum: {total_bits})")
+            if total_bits >= 260:
+                break
 
-        tk.Label(transaction_window, text="توضیحات:", font=font_style).pack(pady=5)
-        entry_description = tk.Entry(transaction_window, font=font_style)
-        entry_description.pack(pady=5)
+    if len(residues) < 2:
+        return None
 
-        tk.Label(transaction_window, text="تاریخ:", font=font_style).pack(pady=5)
-        entry_date = tk.Entry(transaction_window, font=font_style)
-        entry_date.insert(0, datetime.now().strftime("%Y-%m-%d"))
-        entry_date.pack(pady=5)
+    d_recovered, _ = crt(moduli_used, residues)
+    return d_recovered % N
 
-        tk.Button(transaction_window, text="ثبت خروجی", command=save_output, font=font_style).pack(pady=20)
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python3 crack_full_key.py <pubkey_x> <pubkey_y>")
+        sys.exit(1)
 
-    # تابع برای ساخت اکسل تکی هر کالا
-    def export_single_excel():
-        cursor.execute("SELECT * FROM items")
-        items = cursor.fetchall()
-        for item in items:
-            item_id = item[0]
-            cursor.execute("SELECT * FROM transactions WHERE item_id = ?", (item_id,))
-            transactions = cursor.fetchall()
-            df = pd.DataFrame(transactions, columns=["شناسه", "کد کالا", "نوع", "تعداد", "توضیحات", "تاریخ"])
-            df.to_excel(f"{item[1]}_transactions.xlsx", index=False)
-        messagebox.showinfo("اکسل", "فایل‌های اکسل کالاها با موفقیت ذخیره شد!")
+    pubkey_x = int(sys.argv[1])
+    pubkey_y = int(sys.argv[2])
 
-    # دکمه‌های عملیات
-    tk.Button(item_window, text="ورودی جدید", command=add_input, font=font_style).pack(side="left", padx=10, pady=10)
-    tk.Button(item_window, text="خروجی جدید", command=add_output, font=font_style).pack(side="left", padx=10, pady=10)
-    tk.Button(item_window, text="دریافت اکسل تکی", command=export_single_excel, font=font_style).pack(side="left", padx=10, pady=10)
+    d = pfich_recover_d(pubkey_x, pubkey_y)
 
-# دکمه‌ها در پنجره اصلی
-btn_show_items = tk.Button(root, text="نمایش لیست کالاها", command=show_items, **button_options)
-btn_add_item = tk.Button(root, text="وارد کردن کالای جدید", font=font_style, bg='#D5E4F2')
-btn_export_excel = tk.Button(root, text="خروجی اکسل کلی", font=font_style, bg='#D5E4F2')
-
-btn_show_items.pack(fill='x', pady=5, padx=10, anchor='e')
-btn_add_item.pack(fill='x', pady=5, padx=10, anchor='e')
-btn_export_excel.pack(fill='x', pady=5, padx=10, anchor='e')
-
-# شروع حلقه اصلی برنامه
-root.mainloop()
-conn.close()
+    if d:
+        print("[+] ✅ FULL Private Key Recovered:")
+        print(hex(d))
+    else:
+        print("[-] ❌ Could not recover key. Check input or try more moduli.")
