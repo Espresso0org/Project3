@@ -1,72 +1,74 @@
-from sympy import mod_inverse
-import random
+from hashlib import sha256
 
+# Curve parameters for secp256k1
 p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
 a = 0
 b = 7
+Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
+Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
+n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+def inv_mod(k, p):
+    return pow(k, p-2, p)
 
 def point_add(P, Q):
     if P is None:
         return Q
     if Q is None:
         return P
-
     if P == Q:
         if P[1] == 0:
             return None
-        s = (3 * P[0] ** 2 + a) * mod_inverse(2 * P[1], p) % p
+        s = (3 * P[0] * P[0] * inv_mod(2 * P[1], p)) % p
     else:
         if P[0] == Q[0]:
             return None
-        s = (Q[1] - P[1]) * mod_inverse(Q[0] - P[0], p) % p
-
-    Rx = (s ** 2 - P[0] - Q[0]) % p
+        s = ((Q[1] - P[1]) * inv_mod(Q[0] - P[0], p)) % p
+    Rx = (s * s - P[0] - Q[0]) % p
     Ry = (s * (P[0] - Rx) - P[1]) % p
     return (Rx, Ry)
 
-def point_neg(P):
-    return (P[0], (-P[1]) % p) if P else None
+def point_double(P):
+    return point_add(P, P)
 
-def point_mul(k, P):
+def scalar_mult(k, P, fault_bit=None):
     R = None
     Q = P
-    while k > 0:
-        if k % 2 == 1:
+    for i in reversed(range(k.bit_length())):
+        R = point_double(R)
+        bit = (k >> i) & 1
+        # Simulate fault by flipping the bit at fault_bit position
+        if i == fault_bit:
+            bit = 1 - bit
+        if bit == 1:
             R = point_add(R, Q)
-        Q = point_add(Q, Q)
-        k = k // 2
     return R
 
-def is_on_curve(P):
-    if P is None:
-        return False
-    x, y = P
-    return (y ** 2 - (x ** 3 + a * x + b)) % p == 0
+def points_equal(P, Q):
+    return P == Q
 
-def find_order_3_points(limit=100000):
-    found = []
-    tries = 0
-    print("Searching for order-3 points...")
-    while len(found) < 1 and tries < limit:
-        x = random.randint(1, p - 1)
-        rhs = (x ** 3 + b) % p
-        y2 = pow(rhs, (p + 1) // 4, p)
-        if pow(y2, 2, p) != rhs:
-            tries += 1
-            continue
-        P = (x, y2)
-        if not is_on_curve(P):
-            tries += 1
-            continue
-        P3 = point_mul(3, P)
-        if P3 is None:
-            print(f"✅ Found order-3 point at x = {x}")
-            found.append(P)
-        tries += 1
-    print(f"Total found: {len(found)} after {tries} tries")
-    return found
+def print_point(label, P):
+    if P is None:
+        print(f"{label}: Point at infinity")
+    else:
+        print(f"{label}: (0x{P[0]:x}, 0x{P[1]:x})")
 
 if __name__ == "__main__":
-    order3_points = find_order_3_points(500000)
-    for idx, pt in enumerate(order3_points):
-        print(f"Order-3 Point #{idx+1}: {pt}")
+    import random
+
+    # Example private key d (random 256-bit)
+    d = random.randint(1, n-1)
+
+    G = (Gx, Gy)
+    Q = scalar_mult(d, G)  # Correct public key
+
+    print_point("Correct Q", Q)
+    print(f"Private key d: {d}")
+
+    # Try faults at each bit of d
+    for fault_bit in range(d.bit_length()):
+        Q_faulty = scalar_mult(d, G, fault_bit=fault_bit)
+        diff = not points_equal(Q, Q_faulty)
+        print(f"Fault at bit {fault_bit}: {'DIFFERENT' if diff else 'SAME'}")
+        if diff:
+            print_point("Faulty Q", Q_faulty)
