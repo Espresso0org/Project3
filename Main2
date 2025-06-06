@@ -1,6 +1,4 @@
 from sympy.ntheory.modular import crt
-import sys
-from multiprocessing import Pool, cpu_count
 import math
 
 # secp256k1 constants
@@ -10,6 +8,123 @@ Gx = 550662630222773436695787188951685343262506034537775941755001873603891167292
 Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
 G = (Gx, Gy)
 N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+small_moduli = [
+    4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967187,
+    4294967171, 4294967161, 4294967143, 4294967129, 4294967111, 4294967107,
+]
+
+def mod_inv(a, p):
+    return pow(a, p-2, p)
+
+def point_add(p_mod, P, Q):
+    if P is None: return Q
+    if Q is None: return P
+    x1, y1 = P
+    x2, y2 = Q
+    if x1 == x2 and y1 != y2:
+        return None
+    if x1 == x2:
+        l = (3 * x1 * x1) * mod_inv(2 * y1, p_mod)
+    else:
+        l = (y2 - y1) * mod_inv(x2 - x1, p_mod)
+    l %= p_mod
+    x3 = (l*l - x1 - x2) % p_mod
+    y3 = (l*(x1 - x3) - y1) % p_mod
+    return (x3, y3)
+
+def scalar_mult(p_mod, k, P):
+    result = None
+    addend = P
+    while k > 0:
+        if k & 1:
+            result = point_add(p_mod, result, addend)
+        addend = point_add(p_mod, addend, addend)
+        k >>= 1
+    return result
+
+def is_on_curve(p_mod, P):
+    if P is None:
+        return False
+    x, y = P
+    return (y*y - (x*x*x + A*x + B)) % p_mod == 0
+
+def fold_point(P, modulus):
+    x, y = P
+    return (x % modulus, y % modulus)
+
+def point_neg(p_mod, P):
+    if P is None:
+        return None
+    x, y = P
+    return (x, (-y) % p_mod)
+
+def baby_step_giant_step(p_mod, G_folded, Q_folded, order=None):
+    if order is None:
+        order = p_mod  # fallback
+
+    m = int(math.ceil(math.sqrt(order)))
+
+    # Baby steps
+    baby_steps = {}
+    R = None
+    for j in range(m):
+        baby_steps[R] = j
+        R = point_add(p_mod, R, G_folded)
+
+    # Compute G^-m
+    inv_mG = scalar_mult(p_mod, order - m, G_folded)
+
+    # Giant steps
+    gamma = Q_folded
+    for i in range(m):
+        if gamma in baby_steps:
+            return (i * m + baby_steps[gamma]) % order
+        gamma = point_add(p_mod, gamma, inv_mG)
+
+    return None
+
+def test_moduli_diagnostics(d_input):
+    print(f"\n[*] Diagnostic Test for d = {d_input}\n")
+
+    Q = scalar_mult(P, d_input, G)
+
+    success = 0
+    total_bits = 0
+
+    for mod in small_moduli:
+        G_folded = fold_point(G, mod)
+        Q_folded = fold_point(Q, mod)
+
+        if not is_on_curve(mod, G_folded):
+            print(f"[x] mod {mod} ❌ G_folded not on curve")
+            continue
+        if not is_on_curve(mod, Q_folded):
+            print(f"[x] mod {mod} ❌ Q_folded not on curve")
+            continue
+
+        # For prime moduli, order divides p+1±something, here let's just use mod
+        order = mod
+
+        d_mod = baby_step_giant_step(mod, G_folded, Q_folded, order)
+        if d_mod == (d_input % order):
+            print(f"[✓] mod {mod} ✅ SUCCESS — Found correct d mod {mod}")
+            total_bits += mod.bit_length()
+            success += 1
+        elif d_mod is not None:
+            print(f"[~] mod {mod} ⚠️ WRONG result — Got d ≡ {d_mod} mod {mod}, expected {d_input % order}")
+        else:
+            print(f"[ ] mod {mod} ❓ BSGS failed")
+
+    print(f"\n[!] Total successful moduli: {success}")
+    print(f"[!] Total bits of information collected: {total_bits}\n")
+
+if __name__ == "__main__":
+    # Example diagnostics on small d values
+    test_moduli_diagnostics(1)
+    test_moduli_diagnostics(2)
+    test_moduli_diagnostics(3)
+    test_moduli_diagnostics(17)
 
 small_moduli = [
     4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967187,
