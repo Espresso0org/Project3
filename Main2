@@ -1,7 +1,6 @@
 from sympy.ntheory.modular import crt
-from multiprocessing import Pool, cpu_count
 
-# secp256k1 constants
+# secp256k1 curve parameters (original prime field)
 P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
 A, B = 0, 7
 Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
@@ -9,6 +8,7 @@ Gy = 326705100207588169780830851305070431844712733806592432759389043357573374824
 G = (Gx, Gy)
 N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
+# Small primes to fold over
 small_moduli = [
     4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967187,
     4294967171, 4294967161, 4294967143, 4294967129, 4294967111, 4294967107,
@@ -20,25 +20,34 @@ small_moduli = [
     4294966841, 4294966833, 4294966823, 4294966811, 4294966803, 4294966799
 ]
 
+def mod_inv(a, p):
+    # Modular inverse of a mod p, p prime assumed
+    return pow(a, p - 2, p)
+
 def point_add(p_mod, P, Q):
-    if P is None: return Q
-    if Q is None: return P
+    if P is None:
+        return Q
+    if Q is None:
+        return P
     x1, y1 = P
     x2, y2 = Q
-    if x1 == x2 and y1 != y2: return None
+    if x1 == x2 and (y1 != y2 or y1 == 0):
+        return None
     if x1 == x2:
-        l = (3 * x1 * x1) * pow(2 * y1, -1, p_mod)
+        # Point doubling
+        s = (3 * x1 * x1) * mod_inv(2 * y1, p_mod)
     else:
-        l = (y2 - y1) * pow(x2 - x1, -1, p_mod)
-    l %= p_mod
-    x3 = (l * l - x1 - x2) % p_mod
-    y3 = (l * (x1 - x3) - y1) % p_mod
+        # Point addition
+        s = (y2 - y1) * mod_inv(x2 - x1, p_mod)
+    s %= p_mod
+    x3 = (s * s - x1 - x2) % p_mod
+    y3 = (s * (x1 - x3) - y1) % p_mod
     return (x3, y3)
 
 def scalar_mult(p_mod, k, P):
     result = None
     addend = P
-    while k:
+    while k > 0:
         if k & 1:
             result = point_add(p_mod, result, addend)
         addend = point_add(p_mod, addend, addend)
@@ -56,8 +65,6 @@ def is_on_curve(p_mod, P):
     return (y * y - (x * x * x + A * x + B)) % p_mod == 0
 
 def pollards_rho_discrete_log(p_mod, G_folded, Q_folded, order=None):
-    import random
-
     if order is None:
         order = p_mod
 
@@ -81,7 +88,7 @@ def pollards_rho_discrete_log(p_mod, G_folded, Q_folded, order=None):
     X = (x, a, b)
     x_prime = X
 
-    for i in range(1, order):
+    for _ in range(1, order * 2):  # *2 for more iterations if needed
         X = f(*X)
         x_prime = f(*f(*x_prime))
 
@@ -90,19 +97,18 @@ def pollards_rho_discrete_log(p_mod, G_folded, Q_folded, order=None):
             s = (x_prime[2] - X[2]) % order
             if s == 0:
                 return None
-            inv_s = pow(s, -1, order)
+            inv_s = mod_inv(s, order)
             return (r * inv_s) % order
     return None
 
 def test_moduli_diagnostics(d_input):
     print(f"\n[*] Diagnostic Test for d = {d_input}\n")
 
-    Q = scalar_mult(P, d_input, G)  # FIXED: pass prime first!
+    # Compute Q = d*G on original curve over prime P
+    Q = scalar_mult(P, d_input, G)
     if Q is None:
-        print("Scalar multiplication failed")
+        print("[!] Scalar multiplication failed for input d")
         return
-
-    Qx, Qy = Q
 
     success = 0
     total_bits = 0
@@ -111,30 +117,33 @@ def test_moduli_diagnostics(d_input):
         G_folded = fold_point(G, mod)
         Q_folded = fold_point(Q, mod)
 
-        # Skip curve check warnings because folded points often not on small curve
-        # if not is_on_curve(mod, G_folded):
-        #     print(f"[x] mod {mod} ❌ G_folded not on curve")
-        #     continue
-        # if not is_on_curve(mod, Q_folded):
-        #     print(f"[x] mod {mod} ❌ Q_folded not on curve")
-        #     continue
+        if not is_on_curve(mod, G_folded):
+            # folded G not on curve mod p, skip this modulus
+            continue
+        if not is_on_curve(mod, Q_folded):
+            # folded Q not on curve mod p, skip this modulus
+            continue
 
-        order = mod  # Use modulus as order for this test, skipping get_point_order
+        # For test, we use order = mod since order unknown, approx
+        order = mod
 
         d_mod = pollards_rho_discrete_log(mod, G_folded, Q_folded, order)
-        if d_mod == (d_input % order):
-            print(f"[✓] mod {mod} ✅ SUCCESS — Found correct d mod {mod}")
+        expected = d_input % order
+
+        if d_mod == expected:
+            print(f"[✓] mod {mod} SUCCESS: Found correct d mod {mod} = {d_mod}")
             total_bits += mod.bit_length()
             success += 1
         elif d_mod is not None:
-            print(f"[~] mod {mod} ⚠️ WRONG result — Got d ≡ {d_mod} mod {mod}, expected {d_input % order}")
+            print(f"[!] mod {mod} WRONG result: Got {d_mod}, expected {expected}")
         else:
-            print(f"[ ] mod {mod} ❓ Pollard's rho failed")
+            print(f"[ ] mod {mod} Pollard's rho failed")
 
     print(f"\n[!] Total successful moduli: {success}")
-    print(f"[!] Total bits of information collected: {total_bits}\n")
+    print(f"[!] Total bits of info collected: {total_bits}\n")
 
 if __name__ == "__main__":
+    # Test for several d values
     test_moduli_diagnostics(1)
     test_moduli_diagnostics(2)
     test_moduli_diagnostics(3)
