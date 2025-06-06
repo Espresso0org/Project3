@@ -1,31 +1,51 @@
-# secp256k1 constants
+import sys
+
+# secp256k1 parameters
 P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
 A, B = 0, 7
 Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
 Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
 G = (Gx, Gy)
 
+# Small moduli subset for testing speed
 small_moduli = [
-    4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967187,
+    4294967291, 4294967279, 4294967231, 4294967197,
 ]
 
-def mod_inv(a, p):
-    return pow(a, p-2, p)
+def mod_inv(a, m):
+    """Modular inverse via Extended Euclidean Algorithm."""
+    a %= m
+    if a == 0:
+        return None
+    lm, hm = 1, 0
+    low, high = a, m
+    while low > 1:
+        r = high // low
+        nm, new = hm - lm * r, high - low * r
+        lm, low, hm, high = nm, new, lm, low
+    return lm % m
 
 def point_add(p_mod, P, Q):
-    if P is None: return Q
-    if Q is None: return P
+    if P is None:
+        return Q
+    if Q is None:
+        return P
     x1, y1 = P
     x2, y2 = Q
-    if x1 == x2 and y1 != y2:
+    if x1 == x2 and (y1 != y2 or y1 == 0):
         return None
     if x1 == x2:
-        l = (3 * x1 * x1) * mod_inv(2 * y1, p_mod)
+        inv = mod_inv(2 * y1, p_mod)
+        if inv is None:
+            return None
+        l = (3 * x1 * x1) * inv % p_mod
     else:
-        l = (y2 - y1) * mod_inv(x2 - x1, p_mod)
-    l %= p_mod
-    x3 = (l*l - x1 - x2) % p_mod
-    y3 = (l*(x1 - x3) - y1) % p_mod
+        inv = mod_inv(x2 - x1, p_mod)
+        if inv is None:
+            return None
+        l = (y2 - y1) * inv % p_mod
+    x3 = (l * l - x1 - x2) % p_mod
+    y3 = (l * (x1 - x3) - y1) % p_mod
     return (x3, y3)
 
 def scalar_mult(p_mod, k, P):
@@ -42,22 +62,64 @@ def is_on_curve(p_mod, P):
     if P is None:
         return False
     x, y = P
-    return (y*y - (x*x*x + A*x + B)) % p_mod == 0
+    return (y * y - (x * x * x + A * x + B)) % p_mod == 0
 
-def fold_point(P, modulus):
+def fold_point(P, mod):
     x, y = P
-    return (x % modulus, y % modulus)
+    return (x % mod, y % mod)
 
-def brute_force_dlog(p_mod, G_folded, Q_folded, max_tries=100000):
-    R = None
-    for d in range(max_tries):
-        if R == Q_folded:
-            return d
-        R = point_add(p_mod, R, G_folded)
+def get_point_order(p_mod, P, max_search=1000000):
+    # Finds the order of point P on curve mod p up to max_search iterations
+    R = P
+    for i in range(1, max_search+1):
+        if R is None:
+            return i
+        R = point_add(p_mod, R, P)
     return None
 
-def test_moduli_bruteforce(d_input):
-    print(f"\n[*] Brute Force Test for d = {d_input}\n")
+def pollards_rho_discrete_log(p_mod, G_folded, Q_folded, order):
+    import random
+    if order is None:
+        return None
+
+    def f(X):
+        x, a, b = X
+        x0 = x[0]
+        if x0 % 3 == 0:
+            x = point_add(p_mod, x, G_folded)
+            a = (a + 1) % order
+        elif x0 % 3 == 1:
+            x = point_add(p_mod, x, Q_folded)
+            b = (b + 1) % order
+        else:
+            x = point_add(p_mod, x, x)
+            a = (2 * a) % order
+            b = (2 * b) % order
+        return (x, a, b)
+
+    x = G_folded
+    a = 1
+    b = 0
+    X = (x, a, b)
+    x_prime = X
+
+    for i in range(1, order*2):  # Some extra cycles to find collision
+        X = f(X)
+        x_prime = f(f(x_prime))
+
+        if X[0] == x_prime[0]:
+            r = (X[1] - x_prime[1]) % order
+            s = (x_prime[2] - X[2]) % order
+            if s == 0:
+                return None
+            inv_s = mod_inv(s, order)
+            if inv_s is None:
+                return None
+            return (r * inv_s) % order
+    return None
+
+def test_moduli_pollard(d_input):
+    print(f"\n[*] Pollard's Rho Discrete Log Test for d = {d_input}\n")
 
     Q = scalar_mult(P, d_input, G)
 
@@ -75,21 +137,28 @@ def test_moduli_bruteforce(d_input):
             print(f"[x] mod {mod} ❌ Q_folded not on curve")
             continue
 
-        d_mod = brute_force_dlog(mod, G_folded, Q_folded, max_tries=100000)
-        if d_mod == (d_input % mod):
-            print(f"[✓] mod {mod} ✅ SUCCESS — Found correct d mod {mod} = {d_mod}")
+        order = get_point_order(mod, G_folded, max_search=100000)
+        if order is None:
+            print(f"[x] mod {mod} ❌ Could not find order (limit exceeded)")
+            continue
+
+        d_mod = pollards_rho_discrete_log(mod, G_folded, Q_folded, order)
+        expected = d_input % order
+
+        if d_mod == expected:
+            print(f"[✓] mod {mod} ✅ SUCCESS — Found d mod {mod} = {d_mod} (order {order})")
             total_bits += mod.bit_length()
             success += 1
         elif d_mod is not None:
-            print(f"[~] mod {mod} ⚠️ WRONG result — Got d ≡ {d_mod} mod {mod}, expected {d_input % mod}")
+            print(f"[~] mod {mod} ⚠️ WRONG result — Got d ≡ {d_mod} mod {mod}, expected {expected} (order {order})")
         else:
-            print(f"[ ] mod {mod} ❓ Brute force failed")
+            print(f"[ ] mod {mod} ❓ Pollard's rho failed")
 
     print(f"\n[!] Total successful moduli: {success}")
     print(f"[!] Total bits of information collected: {total_bits}\n")
 
 if __name__ == "__main__":
-    test_moduli_bruteforce(1)
-    test_moduli_bruteforce(2)
-    test_moduli_bruteforce(3)
-    test_moduli_bruteforce(10)
+    test_moduli_pollard(1)
+    test_moduli_pollard(2)
+    test_moduli_pollard(3)
+    test_moduli_pollard(10)
