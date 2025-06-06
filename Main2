@@ -1,7 +1,8 @@
-import random
 from sympy.ntheory.modular import crt
+import sys
+from multiprocessing import Pool, cpu_count
 
-# Elliptic curve parameters (secp256k1)
+# secp256k1 constants
 P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
 A, B = 0, 7
 Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
@@ -9,7 +10,6 @@ Gy = 326705100207588169780830851305070431844712733806592432759389043357573374824
 G = (Gx, Gy)
 N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
-# Small moduli (32-bit primes)
 small_moduli = [
     4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967187,
     4294967171, 4294967161, 4294967143, 4294967129, 4294967111, 4294967107,
@@ -21,100 +21,89 @@ small_moduli = [
     4294966841, 4294966833, 4294966823, 4294966811, 4294966803, 4294966799
 ]
 
-# Elliptic curve point addition modulo p
 def point_add(p_mod, P, Q):
-    if P is None:
-        return Q
-    if Q is None:
-        return P
+    if P is None: return Q
+    if Q is None: return P
     x1, y1 = P
     x2, y2 = Q
-    if x1 == x2 and (y1 + y2) % p_mod == 0:
-        return None
-    if x1 == x2 and y1 == y2:
-        l = (3 * x1 * x1) * pow(2 * y1, -1, p_mod) % p_mod
+    if x1 == x2 and y1 != y2: return None
+    if x1 == x2:
+        l = (3 * x1 * x1) * pow(2 * y1, -1, p_mod)
     else:
-        l = (y2 - y1) * pow(x2 - x1, -1, p_mod) % p_mod
+        l = (y2 - y1) * pow(x2 - x1, -1, p_mod)
+    l %= p_mod
     x3 = (l * l - x1 - x2) % p_mod
     y3 = (l * (x1 - x3) - y1) % p_mod
     return (x3, y3)
 
-# Scalar multiplication modulo p
 def scalar_mult(p_mod, k, P):
     result = None
     addend = P
-    while k > 0:
+    while k:
         if k & 1:
             result = point_add(p_mod, result, addend)
         addend = point_add(p_mod, addend, addend)
         k >>= 1
     return result
 
-# Fold a point modulo p_mod
-def fold_point(P, p_mod):
-    if P is None:
-        return None
+def fold_point(P, modulus):
     x, y = P
-    return (x % p_mod, y % p_mod)
+    return (x % modulus, y % modulus)
 
-# Extended Euclidean algorithm for modular inverse
-def modinv(a, m):
-    g, x, _ = extended_gcd(a, m)
-    if g != 1:
-        return None  # No inverse
-    return x % m
+def is_on_curve(p_mod, P):
+    if P is None:
+        return False
+    x, y = P
+    return (y * y - (x * x * x + A * x + B)) % p_mod == 0
 
-def extended_gcd(a, b):
-    if b == 0:
-        return (a, 1, 0)
-    else:
-        g, y, x = extended_gcd(b, a % b)
-        return (g, x, y - (a // b) * x)
+def get_point_order(p_mod, P):
+    # Try small multiples of P to find order (up to a limit)
+    # Return None if not found within limit
+    limit = 10000
+    R = P
+    for i in range(1, limit+1):
+        if R is None:
+            return i
+        R = point_add(p_mod, R, P)
+    return None
 
-# Pollard's Rho for ECDLP modulo p
-def pollards_rho_ecdlog(p, G, Q):
-    # Order estimate: p
-    def f(X, A, B):
-        x, y = X
-        if x % 3 == 0:
-            # Set 1
-            Xn = point_add(p, X, G)
-            An = (A + 1) % p
-            Bn = B
-        elif x % 3 == 1:
-            # Set 2
-            Xn = point_add(p, X, X)
-            An = (2 * A) % p
-            Bn = (2 * B) % p
+def pollards_rho_discrete_log(p_mod, G_folded, Q_folded, order=None):
+    import random
+
+    if order is None:
+        order = p_mod
+
+    def f(X, a, b):
+        x, a_, b_ = X
+        if x[0] % 3 == 0:
+            x = point_add(p_mod, x, G_folded)
+            a_ = (a_ + 1) % order
+        elif x[0] % 3 == 1:
+            x = point_add(p_mod, x, Q_folded)
+            b_ = (b_ + 1) % order
         else:
-            # Set 3
-            Xn = point_add(p, X, Q)
-            An = A
-            Bn = (B + 1) % p
-        return Xn, An, Bn
+            x = point_add(p_mod, x, x)
+            a_ = (2 * a_) % order
+            b_ = (2 * b_) % order
+        return (x, a_, b_)
 
-    # Initialize
-    x, a, b = G, 1, 0
-    X, A, B = G, 1, 0
+    x = G_folded
+    a = 1
+    b = 0
+    X = (x, a, b)
+    x_prime = X
 
-    for i in range(p * 2):
-        x, a, b = f(x, a, b)
-        X, A, B = f(*f(X, A, B))  # Move twice
+    for i in range(1, order):
+        X = f(*X)
+        x_prime = f(*f(*x_prime))
 
-        if x == X:
-            r = (a - A) % p
-            s = (B - b) % p
-            if r == 0:
-                return None  # Failure, retry needed
-            inv_r = modinv(r, p)
-            if inv_r is None:
+        if X[0] == x_prime[0]:
+            r = (X[1] - x_prime[1]) % order
+            s = (x_prime[2] - X[2]) % order
+            if s == 0:
                 return None
-            d = (s * inv_r) % p
-            # Verify result
-            if scalar_mult(p, d, G) == Q:
-                return d
-            else:
-                return None
+            inv_s = pow(s, -1, order)
+            return (r * inv_s) % order
     return None
 
 def pfich_recover_d(Qx, Qy):
@@ -123,12 +112,16 @@ def pfich_recover_d(Qx, Qy):
     moduli_used = []
     total_bits = 0
 
-    for mod in small_moduli:
-        G_folded = fold_point(G, mod)
-        Q_folded = fold_point(Q, mod)
-        if G_folded is None or Q_folded is None:
-            continue
-        d_mod = pollards_rho_ecdlog(mod, G_folded, Q_folded)
+    with Pool(cpu_count()) as pool:
+        tasks = []
+        for mod in small_moduli:
+            G_folded = fold_point(G, mod)
+            Q_folded = fold_point(Q, mod)
+            tasks.append((mod, G_folded, Q_folded))
+
+        results = pool.map(entropy_probe_parallel, tasks)
+
+    for mod, d_mod in results:
         if d_mod is not None:
             residues.append(d_mod)
             moduli_used.append(mod)
@@ -143,19 +136,54 @@ def pfich_recover_d(Qx, Qy):
     d_recovered, _ = crt(moduli_used, residues)
     return d_recovered % N
 
-# Example main usage:
+def entropy_probe_parallel(args):
+    mod, G_folded, Q_folded = args
+    d_mod = pollards_rho_discrete_log(mod, G_folded, Q_folded)
+    return (mod, d_mod)
+
+def test_moduli_diagnostics(d_input):
+    print(f"\n[*] Diagnostic Test for d = {d_input}\n")
+
+    Qx, Qy = scalar_mult(P, d_input, G)
+    Q = (Qx, Qy)
+
+    success = 0
+    total_bits = 0
+
+    for mod in small_moduli:
+        G_folded = fold_point(G, mod)
+        Q_folded = fold_point(Q, mod)
+
+        if not is_on_curve(mod, G_folded):
+            print(f"[x] mod {mod} ❌ G_folded not on curve")
+            continue
+        if not is_on_curve(mod, Q_folded):
+            print(f"[x] mod {mod} ❌ Q_folded not on curve")
+            continue
+
+        order = get_point_order(mod, G_folded)
+        if order is None or order < 10:
+            print(f"[x] mod {mod} ❌ Invalid point order: {order}")
+            continue
+
+        d_mod = pollards_rho_discrete_log(mod, G_folded, Q_folded, order)
+        if d_mod == (d_input % order):
+            print(f"[✓] mod {mod} ✅ SUCCESS — Found correct d mod {mod}")
+            total_bits += mod.bit_length()
+            success += 1
+        elif d_mod is not None:
+            print(f"[~] mod {mod} ⚠️ WRONG result — Got d ≡ {d_mod} mod {mod}, expected {d_input % order}")
+        else:
+            print(f"[ ] mod {mod} ❓ Pollard's rho failed")
+
+    print(f"\n[!] Total successful moduli: {success}")
+    print(f"[!] Total bits of information collected: {total_bits}\n")
+
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) != 3:
-        print("Usage: python3 crack_full_key.py <pubkey_x> <pubkey_y>")
-        sys.exit(1)
-
-    pubkey_x = int(sys.argv[1])
-    pubkey_y = int(sys.argv[2])
-
-    d = pfich_recover_d(pubkey_x, pubkey_y)
-    if d:
-        print("[+] ✅ FULL Private Key Recovered:")
-        print(hex(d))
-    else:
-        print("[-] ❌ Could not recover key. Try more moduli or retry.")
+    # Example usage:
+    # python3 this_script.py <pubkey_x> <pubkey_y> or
+    # Run diagnostics on chosen d:
+    test_moduli_diagnostics(1)
+    test_moduli_diagnostics(2)
+    test_moduli_diagnostics(3)
+    test_moduli_diagnostics(17)
