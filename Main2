@@ -1,5 +1,7 @@
-# Toy elliptic curve setup (for clarity)
-# We'll simulate EC math manually
+# Toy elliptic curve setup (for demo purposes only)
+# Simulated EC math (not real EC operations!)
+
+from math import gcd
 
 # Curve order (n)
 n = 97  # small prime for demo
@@ -7,44 +9,53 @@ Gx = 5  # fake generator x
 Gy = 1  # fake generator y
 G = (Gx, Gy)
 
-# Simulated scalar multiply (fake, just for structure)
+# Simulated scalar multiplication (just multiplying coordinates mod n)
 def point_mul(k, P):
     return ((P[0] * k) % n, (P[1] * k) % n)
 
-# Simulated add (fake structure)
+# Simulated point addition (again, just coordinate-wise addition mod n)
 def point_add(P1, P2):
     return ((P1[0] + P2[0]) % n, (P1[1] + P2[1]) % n)
 
-# Modular inverse
+# Modular inverse with safety check
 def modinv(a, n):
+    a = int(a)
+    if a == 0:
+        raise ZeroDivisionError("Cannot invert 0")
+    if gcd(a, n) != 1:
+        raise ValueError(f"{a} has no inverse modulo {n}")
     return pow(a, -1, n)
 
 # Our "private key"
 d = 45
 
-# Q = d·G
+# Public key Q = d·G
 Q = point_mul(d, G)
 
-# Let's pick a = 3, b = 2
+# Choose parameters
 a = 3
-b = 2
+b = 2  # Make sure b is invertible mod n
 
-# Compute R = a·G + b·Q
+# a·G and b·Q
 aG = point_mul(a, G)
 bQ = point_mul(b, Q)
+
+# R = a·G + b·Q
 R = point_add(aG, bQ)
 
+# r is x-coordinate of R
 r = R[0] % n
 
-# Compute s and z
+# Compute s = r * b⁻¹ mod n
 s = (r * modinv(b, n)) % n
+
+# Compute z = r * a * b⁻¹ mod n
 z = (r * a * modinv(b, n)) % n
 
-# Slightly modify z to simulate fake sig
-z += 1
-z = z % n
+# Simulate a forged or "tampered" signature by tweaking z
+z = (z + 1) % n  # Add 1 to simulate a small change
 
-# Show values
+# Show all key values
 print(f"G: {G}")
 print(f"Q (public key): {Q}")
 print(f"R: {R}")
@@ -52,10 +63,16 @@ print(f"r: {r}")
 print(f"s: {s}")
 print(f"z (modified): {z}")
 
-# Now solve for d
+# Try to recover d from the forged signature
 numerator = (z - s * a) % n
 denominator = (s * b - r) % n
+
+# Ensure denominator is invertible
+if gcd(denominator, n) != 1:
+    raise ValueError(f"Denominator {denominator} has no inverse modulo {n}")
+
 d_recovered = (numerator * modinv(denominator, n)) % n
 
+# Output recovered vs original key
 print(f"Recovered d: {d_recovered}")
 print(f"Original d:  {d}")
