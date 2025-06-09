@@ -1,53 +1,61 @@
-from ecdsa import SECP256k1, ellipticcurve, numbertheory
-from ecdsa.ecdsa import generator_secp256k1
-import random
+# Toy elliptic curve setup (for clarity)
+# We'll simulate EC math manually
 
-curve = SECP256k1
-G = generator_secp256k1
-n = G.order()
+# Curve order (n)
+n = 97  # small prime for demo
+Gx = 5  # fake generator x
+Gy = 1  # fake generator y
+G = (Gx, Gy)
 
+# Simulated scalar multiply (fake, just for structure)
+def point_mul(k, P):
+    return ((P[0] * k) % n, (P[1] * k) % n)
+
+# Simulated add (fake structure)
+def point_add(P1, P2):
+    return ((P1[0] + P2[0]) % n, (P1[1] + P2[1]) % n)
+
+# Modular inverse
 def modinv(a, n):
-    return numbertheory.inverse_mod(a, n)
+    return pow(a, -1, n)
 
-def compute_R(a, b, Q):
-    return a * G + b * Q
+# Our "private key"
+d = 45
 
-def forge_signature(a, b, Q_point, fudge_z=0, fudge_s=0):
-    R = compute_R(a, b, Q_point)
-    r = R.x() % n
-    if b == 0:
-        raise ValueError("b must not be 0")
-    s = (r * modinv(b, n)) % n
-    z = (r * a * modinv(b, n)) % n
+# Q = d·G
+Q = point_mul(d, G)
 
-    s = (s + fudge_s) % n
-    z = (z + fudge_z) % n
+# Let's pick a = 3, b = 2
+a = 3
+b = 2
 
-    return {'r': r, 's': s, 'z': z, 'a': a, 'b': b}
+# Compute R = a·G + b·Q
+aG = point_mul(a, G)
+bQ = point_mul(b, Q)
+R = point_add(aG, bQ)
 
-def extract_d(sig):
-    r, s, z, a, b = sig['r'], sig['s'], sig['z'], sig['a'], sig['b']
-    numerator = (z - s * a) % n
-    denominator = (s * b - r) % n
-    if denominator == 0:
-        raise ZeroDivisionError("Invalid signature: denominator is 0")
-    d = (numerator * modinv(denominator, n)) % n
-    return d
+r = R[0] % n
 
-if __name__ == "__main__":
-    # Random private key
-    d = random.randint(1, n-1)
-    print(f"Random private key d (secret): {d}")
+# Compute s and z
+s = (r * modinv(b, n)) % n
+z = (r * a * modinv(b, n)) % n
 
-    Q_point = d * G
+# Slightly modify z to simulate fake sig
+z += 1
+z = z % n
 
-    sig1 = forge_signature(a=2, b=1, Q_point=Q_point)
-    sig2 = forge_signature(a=3, b=2, Q_point=Q_point, fudge_z=7)  # slight fudge
+# Show values
+print(f"G: {G}")
+print(f"Q (public key): {Q}")
+print(f"R: {R}")
+print(f"r: {r}")
+print(f"s: {s}")
+print(f"z (modified): {z}")
 
-    print(f"Signature 1: {sig1}")
-    print(f"Signature 2: {sig2}")
+# Now solve for d
+numerator = (z - s * a) % n
+denominator = (s * b - r) % n
+d_recovered = (numerator * modinv(denominator, n)) % n
 
-    recovered_d = extract_d(sig2)
-    print(f"Recovered private key d: {recovered_d}")
-
-    print(f"Success? {'YES' if recovered_d == d else 'NO'}")
+print(f"Recovered d: {d_recovered}")
+print(f"Original d:  {d}")
