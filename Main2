@@ -1,164 +1,49 @@
-import sys
+from ecdsa import SECP256k1, ellipticcurve, numbertheory
+from ecdsa.ecdsa import generator_secp256k1
 
-# secp256k1 parameters
-P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
-A, B = 0, 7
-Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
-Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
-G = (Gx, Gy)
+curve = SECP256k1
+G = generator_secp256k1
+n = G.order()
 
-# Small moduli subset for testing speed
-small_moduli = [
-    4294967291, 4294967279, 4294967231, 4294967197,
-]
+def modinv(a, n):
+    return numbertheory.inverse_mod(a, n)
 
-def mod_inv(a, m):
-    """Modular inverse via Extended Euclidean Algorithm."""
-    a %= m
-    if a == 0:
-        return None
-    lm, hm = 1, 0
-    low, high = a, m
-    while low > 1:
-        r = high // low
-        nm, new = hm - lm * r, high - low * r
-        lm, low, hm, high = nm, new, lm, low
-    return lm % m
+def compute_R(a, b, Q):
+    return a * G + b * Q
 
-def point_add(p_mod, P, Q):
-    if P is None:
-        return Q
-    if Q is None:
-        return P
-    x1, y1 = P
-    x2, y2 = Q
-    if x1 == x2 and (y1 != y2 or y1 == 0):
-        return None
-    if x1 == x2:
-        inv = mod_inv(2 * y1, p_mod)
-        if inv is None:
-            return None
-        l = (3 * x1 * x1) * inv % p_mod
-    else:
-        inv = mod_inv(x2 - x1, p_mod)
-        if inv is None:
-            return None
-        l = (y2 - y1) * inv % p_mod
-    x3 = (l * l - x1 - x2) % p_mod
-    y3 = (l * (x1 - x3) - y1) % p_mod
-    return (x3, y3)
+def forge_signature(a, b, Q_point, fudge_z=0, fudge_s=0):
+    R = compute_R(a, b, Q_point)
+    r = R.x() % n
+    if b == 0:
+        raise ValueError("b must not be 0")
+    s = (r * modinv(b, n)) % n
+    z = (r * a * modinv(b, n)) % n
 
-def scalar_mult(p_mod, k, P):
-    result = None
-    addend = P
-    while k > 0:
-        if k & 1:
-            result = point_add(p_mod, result, addend)
-        addend = point_add(p_mod, addend, addend)
-        k >>= 1
-    return result
+    s = (s + fudge_s) % n
+    z = (z + fudge_z) % n
 
-def is_on_curve(p_mod, P):
-    if P is None:
-        return False
-    x, y = P
-    return (y * y - (x * x * x + A * x + B)) % p_mod == 0
+    return {'r': r, 's': s, 'z': z, 'a': a, 'b': b}
 
-def fold_point(P, mod):
-    x, y = P
-    return (x % mod, y % mod)
-
-def get_point_order(p_mod, P, max_search=1000000):
-    # Finds the order of point P on curve mod p up to max_search iterations
-    R = P
-    for i in range(1, max_search+1):
-        if R is None:
-            return i
-        R = point_add(p_mod, R, P)
-    return None
-
-def pollards_rho_discrete_log(p_mod, G_folded, Q_folded, order):
-    import random
-    if order is None:
-        return None
-
-    def f(X):
-        x, a, b = X
-        x0 = x[0]
-        if x0 % 3 == 0:
-            x = point_add(p_mod, x, G_folded)
-            a = (a + 1) % order
-        elif x0 % 3 == 1:
-            x = point_add(p_mod, x, Q_folded)
-            b = (b + 1) % order
-        else:
-            x = point_add(p_mod, x, x)
-            a = (2 * a) % order
-            b = (2 * b) % order
-        return (x, a, b)
-
-    x = G_folded
-    a = 1
-    b = 0
-    X = (x, a, b)
-    x_prime = X
-
-    for i in range(1, order*2):  # Some extra cycles to find collision
-        X = f(X)
-        x_prime = f(f(x_prime))
-
-        if X[0] == x_prime[0]:
-            r = (X[1] - x_prime[1]) % order
-            s = (x_prime[2] - X[2]) % order
-            if s == 0:
-                return None
-            inv_s = mod_inv(s, order)
-            if inv_s is None:
-                return None
-            return (r * inv_s) % order
-    return None
-
-def test_moduli_pollard(d_input):
-    print(f"\n[*] Pollard's Rho Discrete Log Test for d = {d_input}\n")
-
-    Q = scalar_mult(P, d_input, G)
-
-    success = 0
-    total_bits = 0
-
-    for mod in small_moduli:
-        G_folded = fold_point(G, mod)
-        Q_folded = fold_point(Q, mod)
-
-        if not is_on_curve(mod, G_folded):
-            print(f"[x] mod {mod} ❌ G_folded not on curve")
-            continue
-        if not is_on_curve(mod, Q_folded):
-            print(f"[x] mod {mod} ❌ Q_folded not on curve")
-            continue
-
-        order = get_point_order(mod, G_folded, max_search=100000)
-        if order is None:
-            print(f"[x] mod {mod} ❌ Could not find order (limit exceeded)")
-            continue
-
-        d_mod = pollards_rho_discrete_log(mod, G_folded, Q_folded, order)
-        expected = d_input % order
-
-        if d_mod == expected:
-            print(f"[✓] mod {mod} ✅ SUCCESS — Found d mod {mod} = {d_mod} (order {order})")
-            total_bits += mod.bit_length()
-            success += 1
-        elif d_mod is not None:
-            print(f"[~] mod {mod} ⚠️ WRONG result — Got d ≡ {d_mod} mod {mod}, expected {expected} (order {order})")
-        else:
-            print(f"[ ] mod {mod} ❓ Pollard's rho failed")
-
-    print(f"\n[!] Total successful moduli: {success}")
-    print(f"[!] Total bits of information collected: {total_bits}\n")
+def extract_d(sig):
+    r, s, z, a, b = sig['r'], sig['s'], sig['z'], sig['a'], sig['b']
+    numerator = (z - s * a) % n
+    denominator = (s * b - r) % n
+    if denominator == 0:
+        raise ZeroDivisionError("Invalid signature: denominator is 0")
+    d = (numerator * modinv(denominator, n)) % n
+    return d
 
 if __name__ == "__main__":
-    test_moduli_pollard(1)
-    test_moduli_pollard(2)
-    test_moduli_pollard(3)
-    test_moduli_pollard(10)
+    d = 1234567890123456789012345678901234567890
+    print(f"Fixed private key d (secret): {d}")
+
+    Q_point = d * G
+
+    sig = forge_signature(a=3, b=2, Q_point=Q_point, fudge_z=7)
+
+    print(f"Signature: {sig}")
+
+    recovered_d = extract_d(sig)
+    print(f"Recovered private key d: {recovered_d}")
+
+    print(f"Success? {'YES' if recovered_d == d else 'NO'}")
